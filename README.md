@@ -1,23 +1,49 @@
-# Railway Deploy
+# Sniper Bot - Railway + Telegram + TradingView Webhook
 
-## Start command correto
-
-Use este comando no Railway/Render/etc.:
+## Start command no Railway
 
 ```bash
 python start.py
 ```
 
-Nao use `--port '$PORT'` no painel. O arquivo `start.py` ja le a porta pela variavel de ambiente `PORT`.
+## Variáveis obrigatórias para Telegram
 
-## Alternativa com uvicorn via shell
-
-```bash
-sh -c 'uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}'
+```env
+BOT_TELEGRAM=true
+TELEGRAM_BOT_TOKEN=seu_token_do_bot
+TELEGRAM_CHAT_ID=seu_chat_id
+TELEGRAM_PARSE_MODE=HTML
 ```
+
+Não configure `PORT` manualmente no Railway. O Railway injeta `PORT` automaticamente.
 
 ## Endpoints
 
-- `/` retorna status online
-- `/health` retorna status ok
-- `/signal` gera sinal simples com base nos candles enviados
+- `GET /health`: verifica se o bot está online.
+- `POST /telegram/test`: envia uma mensagem de teste para o Telegram.
+- `POST /webhook/tradingview`: recebe 1 candle por webhook, guarda o histórico e envia sinal para Telegram.
+- `POST /signal`: recebe uma lista de candles e envia o sinal para Telegram.
+- `GET /candles/status`: mostra quantos candles foram armazenados por símbolo/timeframe.
+
+## Webhook do TradingView
+
+Use a URL:
+
+```text
+https://SEU-APP.up.railway.app/webhook/tradingview
+```
+
+Mensagem do alerta:
+
+```json
+{
+  "symbol": "{{ticker}}",
+  "timeframe": "{{interval}}",
+  "time": "{{time}}",
+  "open": {{open}},
+  "high": {{high}},
+  "low": {{low}},
+  "close": {{close}},
+  "volume": {{volume}}
+}
+```
