@@ -1,26 +1,38 @@
-# Sniper Bot v6 - Pro Scalper + Railway + Telegram + TradingView
+# Railway Forex Pro Scalper v7
 
-Esta versao nao opera mais apenas pelo candle anterior. Ela usa uma estrategia de score por confluencia:
+Bot profissional de sinais de scalping Forex/XAUUSD via **TradingView webhook + FastAPI + Railway + Telegram**.
 
-- EMA 9/21/50 para tendencia e direcao
-- VWAP para vies intraday
-- RSI para momentum sem sobrecompra/sobrevenda extrema
-- MACD para confirmacao de momentum
-- ADX / +DI / -DI para forca e direcao da tendencia
-- ATR para volatilidade e calculo dinamico de Stop/Take
-- Bollinger Bands para evitar entradas muito esticadas
-- Volume medio para filtrar candles fracos
-- Rompimento/pullback em candle fechado
+## O que foi melhorado nesta versão
 
-## Start command no Railway
+- Filtro de sessão de liquidez: Londres e overlap Londres/NY por padrão.
+- Filtro de spread quando `bid/ask` estiverem disponíveis.
+- Filtro de volatilidade por ATR mínimo/máximo.
+- Filtro anti-chop por Choppiness Index.
+- Filtro anti-spike para evitar candle anormal.
+- Confirmação multi-timeframe por agregação dos candles recebidos.
+- Score técnico com EMA 9/21/50, VWAP, RSI, MACD, ADX/DI, Bollinger, volume, rompimento/pullback e sweep de liquidez.
+- Cooldown entre sinais para reduzir overtrading.
+- Bloqueio de múltiplos sinais abertos por ativo/timeframe.
+- Confirmação automática de WIN/LOSS por candles posteriores.
+- Dashboard visual no endpoint `/`.
+- Estatísticas em `/stats`, `/api/status`, `/signals/open`, `/signals/closed`.
+- Telegram mais profissional com score, filtros, MTF, zona de entrada, SL, TP, RR e gestão.
+- Start command seguro para Railway usando `python start.py`.
+
+## Deploy no Railway
+
+1. Suba todos os arquivos deste ZIP no GitHub, na raiz do repositório.
+2. Crie um projeto no Railway a partir do GitHub.
+3. Em **Variables**, configure as variáveis do `.env.example`.
+4. Use o start command:
 
 ```bash
 python start.py
 ```
 
-Nao configure `PORT` manualmente no Railway. O Railway injeta `PORT` automaticamente.
+Não configure `PORT` manualmente. O Railway injeta a porta automaticamente.
 
-## Variaveis obrigatorias para Telegram
+## Variáveis obrigatórias do Telegram
 
 ```env
 BOT_TELEGRAM=true
@@ -29,87 +41,61 @@ TELEGRAM_CHAT_ID=seu_chat_id
 TELEGRAM_PARSE_MODE=HTML
 ```
 
-## Variaveis recomendadas da estrategia
+Teste o Telegram em:
 
-```env
-SCORE_THRESHOLD=7
-SCORE_DIFF_MIN=2
-EMA_FAST=9
-EMA_SLOW=21
-EMA_TREND=50
-RSI_PERIOD=14
-MACD_FAST=12
-MACD_SLOW=26
-MACD_SIGNAL=9
-ATR_PERIOD=14
-ADX_PERIOD=14
-MIN_ADX=18
-BB_PERIOD=20
-BB_STD=2.0
-VWAP_PERIOD=50
-VOLUME_PERIOD=20
-BREAKOUT_LOOKBACK=5
-MIN_ATR_PCT=0.00025
-MAX_ATR_PCT=0.025
-MIN_VOLUME_MULT=1.05
-MIN_BODY_RATIO=0.35
-ATR_STOP_MULT=1.2
-ATR_TAKE_MULT=1.6
-ALLOW_MULTIPLE_OPEN_SIGNALS=false
+```text
+https://SEU-APP.up.railway.app/telegram/test
 ```
 
-Se voce tinha `SCORE_THRESHOLD=4` da versao antiga, altere para `7` ou `8`. Quanto maior, menos sinais e mais filtro.
+## TradingView
 
-## Horario correto no Telegram
+Use o arquivo:
 
-```env
-BOT_TIMEZONE=America/Sao_Paulo
-BOT_TIME_FORMAT=%d/%m/%Y %H:%M:%S
+```text
+tradingview_pro_scalper_v7.pine
 ```
 
-## Confirmacao de WIN/LOSS
+Depois:
 
-Esta versao acompanha os sinais abertos e envia confirmacao no Telegram quando um candle posterior toca o Take Profit ou o Stop Loss.
-
-```env
-WIN_LOSS_ALERTS=true
-SAME_CANDLE_POLICY=conservative
-MAX_OPEN_SIGNALS=50
-```
-
-Politicas para quando TP e SL sao tocados no mesmo candle:
-
-- `conservative`: marca LOSS, porque sem dados intrabar nao da para saber qual preco veio primeiro.
-- `optimistic`: marca WIN.
-- `skip`: marca INDEFINIDO.
-
-## Endpoints
-
-- `GET /health`: verifica se o bot esta online.
-- `GET /strategy/status`: mostra a configuracao atual da estrategia.
-- `POST /telegram/test`: envia uma mensagem de teste para o Telegram.
-- `POST /webhook/tradingview`: recebe 1 candle por webhook, guarda o historico, envia sinal e confirma WIN/LOSS.
-- `POST /signal`: recebe uma lista de candles e envia o sinal para Telegram.
-- `GET /candles/status`: mostra candles armazenados, sinais abertos e sinais fechados.
-
-## Webhook do TradingView
-
-Use a URL:
+1. Cole no Pine Editor.
+2. Salve e adicione ao gráfico.
+3. Crie um alerta com a condição `Any alert() function call`.
+4. Webhook URL:
 
 ```text
 https://SEU-APP.up.railway.app/webhook/tradingview
 ```
 
-## TradingView: script recomendado
+## Endpoints principais
 
-Use o arquivo `tradingview_sniper_bot.pine`.
+- `/` — dashboard visual.
+- `/health` — status simples para Railway.
+- `/api/status` — status completo.
+- `/webhook/tradingview` — recebe candles do TradingView.
+- `/telegram/test` — testa Telegram.
+- `/stats` — win/loss/win rate.
+- `/signals/open` — sinais abertos.
+- `/signals/closed` — resultados fechados.
 
-Depois de alterar o Pine Script, salve, adicione ao grafico e recrie o alerta do TradingView usando:
+## Sobre filtros de sessão
 
-- Condicao: `Sniper Bot - Enviar Candles`
-- Opcao: `Any alert() function call` / `Qualquer chamada de funcao...`
-- Webhook URL: `https://SEU-APP.up.railway.app/webhook/tradingview`
+Por padrão:
 
-## Observacao importante
+```env
+SESSION_WINDOWS_UTC=07:00-11:00,12:30-16:30
+```
 
-Nenhuma estrategia garante lucro. Esta versao filtra melhor as entradas, mas ainda precisa ser testada em conta demo e validada por ativo/timeframe antes de usar dinheiro real.
+Isso prioriza horários de maior liquidez. Ajuste conforme seu ativo, corretora e horário de verão.
+
+## Sobre notícias
+
+O bot não consulta calendário econômico por conta própria. Para travar manualmente horários de notícia:
+
+```env
+NEWS_BLACKOUT_ENABLED=true
+NEWS_BLACKOUT_WINDOWS_UTC=2026-05-10T12:25:00Z/2026-05-10T13:05:00Z;2026-05-12T18:55:00Z/2026-05-12T19:20:00Z
+```
+
+## Observação importante
+
+Este bot é sinalizador. Ele não executa ordens. Nenhuma estratégia garante lucro. Valide em demo, ajuste por ativo/timeframe e considere spread, slippage e execução real antes de usar dinheiro real.
