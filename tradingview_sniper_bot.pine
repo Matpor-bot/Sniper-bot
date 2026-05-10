@@ -1,0 +1,11 @@
+//@version=5
+indicator("Sniper Bot - Enviar Candles", overlay=true)
+
+vol = na(volume) ? 0.0 : volume
+
+json = "{\"symbol\":\"" + syminfo.ticker + "\",\"timeframe\":\"" + timeframe.period + "\",\"time\":\"" + str.tostring(time) + "\",\"open\":" + str.tostring(open, format.mintick) + ",\"high\":" + str.tostring(high, format.mintick) + ",\"low\":" + str.tostring(low, format.mintick) + ",\"close\":" + str.tostring(close, format.mintick) + ",\"volume\":" + str.tostring(vol) + "}"
+
+if barstate.isconfirmed
+    alert(json, alert.freq_once_per_bar_close)
+
+plot(close, display=display.none)

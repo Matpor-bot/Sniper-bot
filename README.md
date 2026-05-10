@@ -47,3 +47,13 @@ Mensagem do alerta:
   "volume": {{volume}}
 }
 ```
+
+## TradingView: script recomendado
+
+Use o arquivo `tradingview_sniper_bot.pine`. Ele envia o campo `time` como texto para evitar erro 422 no FastAPI/Pydantic.
+
+Depois de alterar o Pine Script, salve, adicione ao gráfico e recrie o alerta do TradingView usando:
+
+- Condição: `Sniper Bot - Enviar Candles`
+- Opção: `Any alert() function call` / `Qualquer chamada de função...`
+- Webhook URL: `https://SEU-APP.up.railway.app/webhook/tradingview`

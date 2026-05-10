@@ -5,11 +5,11 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import requests
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, ValidationError
 
 app = FastAPI(title="Scalping Bot")
 
@@ -19,7 +19,7 @@ SEND_HOLD_SIGNALS = os.getenv("SEND_HOLD_SIGNALS", "false").lower() == "true"
 
 
 class Candle(BaseModel):
-    time: Optional[str] = None
+    time: Optional[Union[str, int, float]] = None
     open: float
     high: float
     low: float
@@ -36,7 +36,7 @@ class SignalRequest(BaseModel):
 class TradingViewWebhook(BaseModel):
     symbol: str = "EURUSD"
     timeframe: str = "M1"
-    time: Optional[str] = None
+    time: Optional[Union[str, int, float]] = None
     open: float
     high: float
     low: float
@@ -205,9 +205,44 @@ def signal(payload: SignalRequest):
 
 
 @app.post("/webhook/tradingview")
-def tradingview_webhook(payload: TradingViewWebhook):
+async def tradingview_webhook(request: Request):
+    """Recebe candles do TradingView.
+
+    O TradingView às vezes envia o corpo como text/plain, mesmo contendo JSON.
+    Por isso o endpoint lê o corpo manualmente e valida depois, evitando o erro 422
+    sem detalhes úteis nos logs.
+    """
+    raw_body = (await request.body()).decode("utf-8", errors="replace").strip()
+
+    try:
+        raw_payload = json.loads(raw_body)
+        if isinstance(raw_payload, str):
+            raw_payload = json.loads(raw_payload)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Webhook recebeu um corpo que não é JSON válido.",
+                "received": raw_body[:500],
+                "hint": "No alerta do TradingView, use Any alert() function call e não coloque texto comum como mensagem do webhook.",
+            },
+        ) from exc
+
+    try:
+        payload = TradingViewWebhook(**raw_payload)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "JSON recebido, mas faltam campos do candle ou algum tipo está inválido.",
+                "required_fields": ["symbol", "timeframe", "time", "open", "high", "low", "close", "volume"],
+                "validation_errors": exc.errors(),
+                "received": raw_payload,
+            },
+        ) from exc
+
     candle = Candle(
-        time=payload.time,
+        time=str(payload.time) if payload.time is not None else None,
         open=payload.open,
         high=payload.high,
         low=payload.low,
