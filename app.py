@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 APP_NAME = "Railway Forex Pro Scalper"
-APP_VERSION = "7.4.0"
+APP_VERSION = "8.2.0"
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 STATE_LOCK = threading.Lock()
 
@@ -42,10 +42,10 @@ BOT_STARTUP_ALERT = os.getenv("BOT_STARTUP_ALERT", "true").lower() == "true"
 SEND_HOLD_SIGNALS = os.getenv("SEND_HOLD_SIGNALS", "false").lower() == "true"
 
 # Estrategia
-STRATEGY_NAME = os.getenv("STRATEGY_NAME", "Pro Scalper v7 - Liquidity/MTF/EMA/VWAP/ADX")
+STRATEGY_NAME = os.getenv("STRATEGY_NAME", "Pro Scalper v8.2 Prime DD-Controlled M5 - EMA/ADX/MTF/Edge Schedule")
 EMA_FAST = int(os.getenv("EMA_FAST", "9"))
 EMA_SLOW = int(os.getenv("EMA_SLOW", "21"))
-EMA_TREND = int(os.getenv("EMA_TREND", "50"))
+EMA_TREND = int(os.getenv("EMA_TREND", "75"))
 RSI_PERIOD = int(os.getenv("RSI_PERIOD", "14"))
 MACD_FAST = int(os.getenv("MACD_FAST", "12"))
 MACD_SLOW = int(os.getenv("MACD_SLOW", "26"))
@@ -59,25 +59,43 @@ VOLUME_PERIOD = int(os.getenv("VOLUME_PERIOD", "20"))
 BREAKOUT_LOOKBACK = int(os.getenv("BREAKOUT_LOOKBACK", "8"))
 CHOP_PERIOD = int(os.getenv("CHOP_PERIOD", "14"))
 
-SCORE_THRESHOLD = int(os.getenv("SCORE_THRESHOLD", "7"))
-SCORE_DIFF_MIN = int(os.getenv("SCORE_DIFF_MIN", "3"))
-MIN_ADX = float(os.getenv("MIN_ADX", "20"))
-MIN_ATR_PCT = float(os.getenv("MIN_ATR_PCT", "0.00012"))
-MAX_ATR_PCT = float(os.getenv("MAX_ATR_PCT", "0.018"))
-MIN_EMA_SEPARATION_PCT = float(os.getenv("MIN_EMA_SEPARATION_PCT", "0.00005"))
-MAX_CHOP = float(os.getenv("MAX_CHOP", "61.8"))
+SCORE_THRESHOLD = int(os.getenv("SCORE_THRESHOLD", "9"))
+SCORE_DIFF_MIN = int(os.getenv("SCORE_DIFF_MIN", "2"))
+MIN_ADX = float(os.getenv("MIN_ADX", "10"))
+MIN_ATR_PCT = float(os.getenv("MIN_ATR_PCT", "0.00004"))
+MAX_ATR_PCT = float(os.getenv("MAX_ATR_PCT", "0.006"))
+MIN_EMA_SEPARATION_PCT = float(os.getenv("MIN_EMA_SEPARATION_PCT", "0.00002"))
+MAX_CHOP = float(os.getenv("MAX_CHOP", "65"))
 MIN_VOLUME_MULT = float(os.getenv("MIN_VOLUME_MULT", "1.05"))
 MIN_BODY_RATIO = float(os.getenv("MIN_BODY_RATIO", "0.35"))
-MAX_CANDLE_ATR_MULT = float(os.getenv("MAX_CANDLE_ATR_MULT", "2.8"))
+MAX_CANDLE_ATR_MULT = float(os.getenv("MAX_CANDLE_ATR_MULT", "2.4"))
+# v8: filtros extras calibrados no backtest M5 2025
+DI_RATIO_MIN = float(os.getenv("DI_RATIO_MIN", "1.0"))
+RSI_BUY_LOW = float(os.getenv("RSI_BUY_LOW", "50"))
+RSI_BUY_HIGH = float(os.getenv("RSI_BUY_HIGH", "80"))
+RSI_SELL_LOW = float(os.getenv("RSI_SELL_LOW", "38"))
+RSI_SELL_HIGH = float(os.getenv("RSI_SELL_HIGH", "55"))
+PULLBACK_ATR_MULT = float(os.getenv("PULLBACK_ATR_MULT", "0.35"))
+MAX_DIST_FROM_EMA_ATR = float(os.getenv("MAX_DIST_FROM_EMA_ATR", "1.25"))
+ALLOW_BREAKOUT_SETUP = os.getenv("ALLOW_BREAKOUT_SETUP", "true").lower() == "true"
+ALLOW_LIQUIDITY_SWEEP_SETUP = os.getenv("ALLOW_LIQUIDITY_SWEEP_SETUP", "true").lower() == "true"
+STRICT_ENTRY_MODE = os.getenv("STRICT_ENTRY_MODE", "true").lower() == "true"
+MACD_REQUIRE_HIST_SLOPE = os.getenv("MACD_REQUIRE_HIST_SLOPE", "false").lower() == "true"
+EMA_SLOPE_BARS = int(os.getenv("EMA_SLOPE_BARS", "5"))
+RECOMMENDED_TIMEFRAME = os.getenv("RECOMMENDED_TIMEFRAME", "M5")
+MAX_BARS_IN_SIGNAL = int(os.getenv("MAX_BARS_IN_SIGNAL", "5"))
+TIMEOUT_CLOSE_AS_RESULT = os.getenv("TIMEOUT_CLOSE_AS_RESULT", "true").lower() == "true"
 
 # Risco / alvo
-ATR_STOP_MULT = float(os.getenv("ATR_STOP_MULT", "1.15"))
-ATR_TAKE_MULT = float(os.getenv("ATR_TAKE_MULT", "1.75"))
-MIN_STOP_PIPS = float(os.getenv("MIN_STOP_PIPS", "3"))
-MAX_STOP_PIPS = float(os.getenv("MAX_STOP_PIPS", "28"))
+ATR_STOP_MULT = float(os.getenv("ATR_STOP_MULT", "0.85"))
+ATR_TAKE_MULT = float(os.getenv("ATR_TAKE_MULT", "0.765"))
+MIN_STOP_PIPS = float(os.getenv("MIN_STOP_PIPS", "4"))
+MAX_STOP_PIPS = float(os.getenv("MAX_STOP_PIPS", "22"))
+MIN_STOP_XAU_PIPS = float(os.getenv("MIN_STOP_XAU_PIPS", "18"))
+MAX_STOP_XAU_PIPS = float(os.getenv("MAX_STOP_XAU_PIPS", "120"))
 ENTRY_ZONE_ATR_MULT = float(os.getenv("ENTRY_ZONE_ATR_MULT", "0.18"))
 ACCOUNT_BALANCE = float(os.getenv("ACCOUNT_BALANCE", "1000"))
-RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", "0.5"))
+RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", "2.0"))
 PIP_VALUE_PER_LOT_USD = float(os.getenv("PIP_VALUE_PER_LOT_USD", "10"))
 MIN_LOT = float(os.getenv("MIN_LOT", "0.01"))
 MAX_LOT = float(os.getenv("MAX_LOT", "5"))
@@ -86,7 +104,7 @@ LOT_STEP = float(os.getenv("LOT_STEP", "0.01"))
 # Filtros profissionais
 SESSION_FILTER_ENABLED = os.getenv("SESSION_FILTER_ENABLED", "true").lower() == "true"
 # Padrao em UTC: Londres inicial + overlap Londres/NY. Ajuste no Railway se operar outro ativo/horario.
-SESSION_WINDOWS_UTC = os.getenv("SESSION_WINDOWS_UTC", "07:00-11:00,12:30-16:30")
+SESSION_WINDOWS_UTC = os.getenv("SESSION_WINDOWS_UTC", "06:00-18:00")
 BLOCK_WEEKEND = os.getenv("BLOCK_WEEKEND", "true").lower() == "true"
 SYMBOL_ALLOWLIST = [s.strip().upper().replace("/", "") for s in os.getenv("SYMBOL_ALLOWLIST", "EURUSD,GBPUSD,USDJPY,USDCHF,USDCAD,AUDUSD,NZDUSD,XAUUSD").split(",") if s.strip()]
 SPREAD_UNKNOWN_POLICY = os.getenv("SPREAD_UNKNOWN_POLICY", "ignore").lower()  # ignore | block
@@ -97,11 +115,18 @@ NEWS_BLACKOUT_WINDOWS_UTC = os.getenv("NEWS_BLACKOUT_WINDOWS_UTC", "")  # ex: 20
 BLOCK_HIGH_IMPACT_FLAG = os.getenv("BLOCK_HIGH_IMPACT_FLAG", "true").lower() == "true"
 
 MULTI_TIMEFRAME_CONFIRMATION = os.getenv("MULTI_TIMEFRAME_CONFIRMATION", "true").lower() == "true"
-MTF_FACTOR = int(os.getenv("MTF_FACTOR", "5"))
-COOLDOWN_BARS = int(os.getenv("COOLDOWN_BARS", "5"))
+MTF_FACTOR = int(os.getenv("MTF_FACTOR", "3"))
+COOLDOWN_BARS = int(os.getenv("COOLDOWN_BARS", "0"))
 ALLOW_MULTIPLE_OPEN_SIGNALS = os.getenv("ALLOW_MULTIPLE_OPEN_SIGNALS", "false").lower() == "true"
 MAX_OPEN_SIGNALS = int(os.getenv("MAX_OPEN_SIGNALS", "50"))
 MAX_OPEN_SIGNALS_PER_MARKET = int(os.getenv("MAX_OPEN_SIGNALS_PER_MARKET", "1"))
+MAX_TOTAL_OPEN_SIGNALS = int(os.getenv("MAX_TOTAL_OPEN_SIGNALS", "2"))
+
+# v8.2: filtro de edge por ativo/hora UTC/dia da semana.
+# Dias: 0=segunda, 1=terca, 2=quarta, 3=quinta, 4=sexta.
+EDGE_SCHEDULE_FILTER_ENABLED = os.getenv("EDGE_SCHEDULE_FILTER_ENABLED", "true").lower() == "true"
+EDGE_ALLOWED_HOURS_UTC = os.getenv("EDGE_ALLOWED_HOURS_UTC", "EURUSD:6,7,10,12,13,15|GBPUSD:9,10,11,12|XAUUSD:8,10,12,13,16")
+EDGE_ALLOWED_WEEKDAYS_UTC = os.getenv("EDGE_ALLOWED_WEEKDAYS_UTC", "EURUSD:0,1,3|GBPUSD:3,4|XAUUSD:0,1,2,4")
 WIN_LOSS_ALERTS = os.getenv("WIN_LOSS_ALERTS", "true").lower() == "true"
 SAME_CANDLE_POLICY = os.getenv("SAME_CANDLE_POLICY", "conservative").lower()  # conservative | optimistic | skip
 ENABLE_ADMIN_ENDPOINTS = os.getenv("ENABLE_ADMIN_ENDPOINTS", "false").lower() == "true"
@@ -309,6 +334,46 @@ def in_daily_windows(dt_utc: datetime, windows_raw: str) -> tuple[bool, str]:
             return True, f"dentro da janela UTC {start_raw}-{end_raw}"
     return False, f"fora das janelas UTC {windows_raw}"
 
+
+
+
+def parse_symbol_int_map(raw: str) -> dict[str, set[int]]:
+    out: dict[str, set[int]] = {}
+    for block in str(raw or "").split("|"):
+        block = block.strip()
+        if not block or ":" not in block:
+            continue
+        sym, values = block.split(":", 1)
+        nums: set[int] = set()
+        for item in values.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            try:
+                nums.add(int(item))
+            except ValueError:
+                continue
+        if nums:
+            out[norm_symbol(sym)] = nums
+    return out
+
+
+def edge_schedule_ok(symbol: str, dt_utc: datetime) -> tuple[bool, str]:
+    if not EDGE_SCHEDULE_FILTER_ENABLED:
+        return True, "edge schedule desativado"
+    sym = norm_symbol(symbol)
+    hours_map = parse_symbol_int_map(EDGE_ALLOWED_HOURS_UTC)
+    weekdays_map = parse_symbol_int_map(EDGE_ALLOWED_WEEKDAYS_UTC)
+    allowed_hours = hours_map.get(sym)
+    allowed_weekdays = weekdays_map.get(sym)
+    hour_ok = True if allowed_hours is None else dt_utc.hour in allowed_hours
+    weekday_ok = True if allowed_weekdays is None else dt_utc.weekday() in allowed_weekdays
+    reason = f"hora UTC {dt_utc.hour:02d}:00 {'ok' if hour_ok else 'bloqueada'}; dia {dt_utc.weekday()} {'ok' if weekday_ok else 'bloqueado'}"
+    return bool(hour_ok and weekday_ok), reason
+
+
+def total_open_signals_count(state: dict) -> int:
+    return sum(len(v) for v in state.get("_open_signals", {}).values())
 
 def in_news_blackout(dt_utc: datetime) -> tuple[bool, str]:
     if not NEWS_BLACKOUT_ENABLED or not NEWS_BLACKOUT_WINDOWS_UTC.strip():
@@ -733,6 +798,54 @@ def resolve_signal_with_candle(signal: dict, candle: Candle) -> Optional[dict]:
     }
 
 
+
+def bars_elapsed_for_signal(state: dict, symbol: str, timeframe: str, signal: dict) -> int:
+    key = state_key(symbol, timeframe)
+    candles = state.get(key, [])
+    target = str(signal.get("timestamp_raw"))
+    if not target or not candles:
+        return 0
+    times = [str(c.get("time")) for c in candles if c.get("time") is not None]
+    try:
+        pos = times.index(target)
+        return max(0, len(times) - pos - 1)
+    except ValueError:
+        return 0
+
+
+def resolve_signal_timeout(signal: dict, candle: Candle, bars_elapsed: int) -> Optional[dict]:
+    if MAX_BARS_IN_SIGNAL <= 0 or bars_elapsed < MAX_BARS_IN_SIGNAL:
+        return None
+    action = signal.get("action")
+    entry = safe_float(signal.get("entry"))
+    close = safe_float(candle.close)
+    if action == "BUY":
+        is_win = close > entry
+    elif action == "SELL":
+        is_win = close < entry
+    else:
+        return None
+    result = "WIN" if (TIMEOUT_CLOSE_AS_RESULT and is_win) else "LOSS"
+    return {
+        **timestamp_fields(candle.time),
+        "result": result,
+        "hit_price": round_price(close, signal.get("symbol", ""), close),
+        "reason": f"Sinal expirou apos {bars_elapsed} candles sem TP/SL. Fechamento {'favoravel' if is_win else 'desfavoravel'}.",
+        "signal": signal,
+        "symbol": signal.get("symbol"),
+        "timeframe": signal.get("timeframe"),
+        "signal_id": signal.get("signal_id"),
+        "action": action,
+        "entry": signal.get("entry"),
+        "stop_loss": signal.get("stop_loss"),
+        "take_profit": signal.get("take_profit"),
+        "candle_open": candle.open,
+        "candle_high": candle.high,
+        "candle_low": candle.low,
+        "candle_close": candle.close,
+        "bars_elapsed": bars_elapsed,
+    }
+
 def check_open_signals(symbol: str, timeframe: str, candle: Candle) -> List[dict]:
     if not WIN_LOSS_ALERTS:
         return []
@@ -751,6 +864,9 @@ def check_open_signals(symbol: str, timeframe: str, candle: Candle) -> List[dict
                 still_open.append(sig)
                 continue
             result = resolve_signal_with_candle(sig, candle)
+            if result is None:
+                bars_elapsed = bars_elapsed_for_signal(state, symbol, timeframe, sig)
+                result = resolve_signal_timeout(sig, candle, bars_elapsed)
             if result is None:
                 still_open.append(sig)
             else:
@@ -916,6 +1032,7 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     mtf = htf_bias(candles, symbol)
 
     idx, prev = -1, -2
+    slope_prev = -1 - max(1, EMA_SLOPE_BARS)
     atr_val = float(atr_series[idx] or 0.0)
     atr_pct_raw = atr_val / close if close else 0.0
     pip = pip_size(symbol, close)
@@ -926,6 +1043,7 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     spread_ok = True if spread_pips is None and SPREAD_UNKNOWN_POLICY != "block" else (spread_pips is not None and spread_pips <= spread_limit)
 
     session_ok, session_reason = in_daily_windows(last_dt, SESSION_WINDOWS_UTC) if SESSION_FILTER_ENABLED else (True, "filtro de sessao desativado")
+    edge_ok, edge_reason = edge_schedule_ok(symbol, last_dt)
     symbol_ok = not SYMBOL_ALLOWLIST or symbol in SYMBOL_ALLOWLIST
     weekend_ok = True
     if BLOCK_WEEKEND:
@@ -939,8 +1057,8 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     ef = float(ema_fast[idx] or close)
     es = float(ema_slow[idx] or close)
     et = float(ema_trend[idx] or close)
-    ef_prev = float(ema_fast[prev] or ef)
-    es_prev = float(ema_slow[prev] or es)
+    ef_prev = float(ema_fast[slope_prev] or ef)
+    es_prev = float(ema_slow[slope_prev] or es)
     vwap = float(vwap_series[idx] or close)
     rsi_val = float(rsi_series[idx] or 50.0)
     adx_val = float(adx_series[idx] or 0.0)
@@ -968,8 +1086,12 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     ema_sep_ok = abs(ef - es) / close >= MIN_EMA_SEPARATION_PCT
     chop_ok = (chop is None) or chop <= MAX_CHOP
     spike_ok = current_range_atr <= MAX_CANDLE_ATR_MULT
-    stop_min = MIN_STOP_PIPS * pip
-    stop_max = MAX_STOP_PIPS * pip
+    if symbol.startswith("XAU") or "GOLD" in symbol:
+        stop_min = MIN_STOP_XAU_PIPS * pip
+        stop_max = MAX_STOP_XAU_PIPS * pip
+    else:
+        stop_min = MIN_STOP_PIPS * pip
+        stop_max = MAX_STOP_PIPS * pip
 
     trend_up = close > et and ef > es > et
     trend_down = close < et and ef < es < et
@@ -977,24 +1099,29 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     ema_slope_down = ef < ef_prev and es < es_prev
     vwap_up = close > vwap
     vwap_down = close < vwap
-    rsi_buy = 50 <= rsi_val <= 67
-    rsi_sell = 33 <= rsi_val <= 50
-    macd_buy = macd_val > macd_sig and hist > 0 and hist >= hist_prev
-    macd_sell = macd_val < macd_sig and hist < 0 and hist <= hist_prev
-    adx_buy = adx_val >= MIN_ADX and plus_di > minus_di
-    adx_sell = adx_val >= MIN_ADX and minus_di > plus_di
+    rsi_buy = RSI_BUY_LOW <= rsi_val <= RSI_BUY_HIGH
+    rsi_sell = RSI_SELL_LOW <= rsi_val <= RSI_SELL_HIGH
+    macd_buy = macd_val > macd_sig and hist > 0 and ((not MACD_REQUIRE_HIST_SLOPE) or hist >= hist_prev)
+    macd_sell = macd_val < macd_sig and hist < 0 and ((not MACD_REQUIRE_HIST_SLOPE) or hist <= hist_prev)
+    adx_buy = adx_val >= MIN_ADX and plus_di > minus_di * DI_RATIO_MIN
+    adx_sell = adx_val >= MIN_ADX and minus_di > plus_di * DI_RATIO_MIN
     bull_candle = close > open_ and body_ratio >= MIN_BODY_RATIO
     bear_candle = close < open_ and body_ratio >= MIN_BODY_RATIO
     breakout_buy = close > lookback_high
     breakout_sell = close < lookback_low
-    pullback_buy = (low <= ef <= close or low <= vwap <= close) and bull_candle and close > es
-    pullback_sell = (high >= ef >= close or high >= vwap >= close) and bear_candle and close < es
+    pullback_buy = ((low <= ef + atr_val * PULLBACK_ATR_MULT) or (low <= es + atr_val * PULLBACK_ATR_MULT)) and bull_candle and close > ef
+    pullback_sell = ((high >= ef - atr_val * PULLBACK_ATR_MULT) or (high >= es - atr_val * PULLBACK_ATR_MULT)) and bear_candle and close < ef
     liquidity_sweep_buy = low < prev_lookback_low and close > prev_lookback_low and bull_candle
     liquidity_sweep_sell = high > prev_lookback_high and close < prev_lookback_high and bear_candle
     bb_buy = bb_mid is not None and bb_upper is not None and float(bb_mid) <= close <= float(bb_upper)
     bb_sell = bb_mid is not None and bb_lower is not None and float(bb_lower) <= close <= float(bb_mid)
     overextended_buy = rsi_val > 72 or (bb_upper is not None and close > float(bb_upper) and rsi_val > 68)
     overextended_sell = rsi_val < 28 or (bb_lower is not None and close < float(bb_lower) and rsi_val < 32)
+    distance_ok = (abs(close - es) / atr_val <= MAX_DIST_FROM_EMA_ATR) if atr_val else False
+    structure_buy = pullback_buy or (ALLOW_BREAKOUT_SETUP and breakout_buy) or (ALLOW_LIQUIDITY_SWEEP_SETUP and liquidity_sweep_buy)
+    structure_sell = pullback_sell or (ALLOW_BREAKOUT_SETUP and breakout_sell) or (ALLOW_LIQUIDITY_SWEEP_SETUP and liquidity_sweep_sell)
+    mtf_buy_ok = mtf.get("bias") == "BUY" if MULTI_TIMEFRAME_CONFIRMATION else True
+    mtf_sell_ok = mtf.get("bias") == "SELL" if MULTI_TIMEFRAME_CONFIRMATION else True
 
     current_metrics = {
         "ema_fast": round_price(ef, symbol, close),
@@ -1026,6 +1153,10 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
         "symbol_ok": symbol_ok,
         "session_ok": session_ok,
         "session_reason": session_reason,
+        "edge_schedule_ok": edge_ok,
+        "edge_schedule_reason": edge_reason,
+        "edge_allowed_hours_utc": EDGE_ALLOWED_HOURS_UTC,
+        "edge_allowed_weekdays_utc": EDGE_ALLOWED_WEEKDAYS_UTC,
         "weekend_ok": weekend_ok,
         "news_ok": news_ok,
         "news_reason": blackout_reason if blackout else ("payload marcou noticia de alto impacto" if high_impact_flag else "ok"),
@@ -1037,6 +1168,10 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
         "chop_ok": chop_ok,
         "spike_ok": spike_ok,
         "volume_ok": volume_ok,
+        "distance_ok": distance_ok,
+        "structure_buy": structure_buy,
+        "structure_sell": structure_sell,
+        "recommended_timeframe": RECOMMENDED_TIMEFRAME,
     }
 
     state = load_state()
@@ -1044,11 +1179,16 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     filters["cooldown_ok"] = can_cooldown
     filters["cooldown_reason"] = cooldown_reason
     current_open_count = len(market_open_signals(state, symbol, timeframe))
+    current_total_open_count = total_open_signals_count(state)
     open_ok = ALLOW_MULTIPLE_OPEN_SIGNALS or current_open_count < MAX_OPEN_SIGNALS_PER_MARKET
+    total_open_ok = current_total_open_count < MAX_TOTAL_OPEN_SIGNALS
     filters["open_signal_ok"] = open_ok
     filters["open_signals_market"] = current_open_count
+    filters["total_open_signal_ok"] = total_open_ok
+    filters["open_signals_total"] = current_total_open_count
+    filters["max_total_open_signals"] = MAX_TOTAL_OPEN_SIGNALS
 
-    hard_filters = [symbol_ok, session_ok, weekend_ok, news_ok, spread_ok, volatility_ok, ema_sep_ok, chop_ok, spike_ok, can_cooldown, open_ok]
+    hard_filters = [symbol_ok, session_ok, edge_ok, weekend_ok, news_ok, spread_ok, volatility_ok, ema_sep_ok, chop_ok, spike_ok, distance_ok, can_cooldown, open_ok, total_open_ok]
     if not all(hard_filters):
         failed = [k for k, v in filters.items() if k.endswith("_ok") and v is False and k != "volume_ok"]
         hold = build_hold(symbol, timeframe, last, "Filtro bloqueou sinal: " + ", ".join(failed), len(candles), current_metrics)
@@ -1072,9 +1212,9 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
         sell_reasons.append(f"+{points} {reason}")
 
     if trend_up:
-        add_buy(2, "tendencia EMA 9/21/50 alinhada")
+        add_buy(2, "tendencia EMA alinhada")
     if trend_down:
-        add_sell(2, "tendencia EMA 9/21/50 alinhada")
+        add_sell(2, "tendencia EMA alinhada")
     if ema_slope_up:
         add_buy(1, "EMAs inclinadas para cima")
     if ema_slope_down:
@@ -1110,10 +1250,10 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
         add_buy(1, "candle comprador com corpo relevante")
     if bear_candle:
         add_sell(1, "candle vendedor com corpo relevante")
-    if breakout_buy or pullback_buy:
-        add_buy(1, "rompimento/pullback comprador")
-    if breakout_sell or pullback_sell:
-        add_sell(1, "rompimento/pullback vendedor")
+    if structure_buy:
+        add_buy(2, "estrutura de entrada v8.1: pullback/breakout/sweep aprovado")
+    if structure_sell:
+        add_sell(2, "estrutura de entrada v8.1: pullback/breakout/sweep aprovado")
     if liquidity_sweep_buy:
         add_buy(1, "varredura de liquidez abaixo e fechamento de recuperacao")
     if liquidity_sweep_sell:
@@ -1134,8 +1274,12 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     reason = "Sem confluencia suficiente para sinal de qualidade"
     selected_score = max(buy_score, sell_score)
     selected_reasons = buy_reasons if buy_score >= sell_score else sell_reasons
-    buy_bias_ok = (trend_up or (vwap_up and ef > es and close > et)) and mtf.get("bias") in {"BUY", "NEUTRO"}
-    sell_bias_ok = (trend_down or (vwap_down and ef < es and close < et)) and mtf.get("bias") in {"SELL", "NEUTRO"}
+    if STRICT_ENTRY_MODE:
+        buy_bias_ok = trend_up and ema_slope_up and mtf_buy_ok and adx_buy and rsi_buy and macd_buy and structure_buy
+        sell_bias_ok = trend_down and ema_slope_down and mtf_sell_ok and adx_sell and rsi_sell and macd_sell and structure_sell
+    else:
+        buy_bias_ok = (trend_up or (vwap_up and ef > es and close > et)) and mtf.get("bias") in {"BUY", "NEUTRO"}
+        sell_bias_ok = (trend_down or (vwap_down and ef < es and close < et)) and mtf.get("bias") in {"SELL", "NEUTRO"}
 
     if buy_score >= SCORE_THRESHOLD and diff >= SCORE_DIFF_MIN and buy_bias_ok and not overextended_buy:
         action = "BUY"
@@ -1272,6 +1416,7 @@ def format_signal(signal: dict) -> str:
         "━━━━━━━━━━━━━━━━━━━━",
         f"RSI {metrics.get('rsi','-')} | ADX {metrics.get('adx','-')} | ATR% {metrics.get('atr_pct','-')} | CHOP {metrics.get('choppiness','-')}",
         f"VWAP {metrics.get('vwap','-')} | Spread {metrics.get('spread_pips','n/i')} pips | Sessão: {esc(str(filters.get('session_reason','-')))}",
+        f"Filtro edge v8.2: {esc(str(filters.get('edge_schedule_reason','-')))}",
         f"MTF: {esc(str((metrics.get('mtf') or {}).get('bias','-')))} — {esc(str((metrics.get('mtf') or {}).get('reason','-')))}",
         "━━━━━━━━━━━━━━━━━━━━",
         f"<b>Motivos:</b>\n{reasons_text}",
@@ -1342,6 +1487,11 @@ def api_status() -> dict:
             "max_spread_pips": MAX_SPREAD_PIPS,
             "max_spread_xau_pips": MAX_SPREAD_XAU_PIPS,
             "allow_multiple_open_signals": ALLOW_MULTIPLE_OPEN_SIGNALS,
+            "max_open_signals_per_market": MAX_OPEN_SIGNALS_PER_MARKET,
+            "max_total_open_signals": MAX_TOTAL_OPEN_SIGNALS,
+            "edge_schedule_filter_enabled": EDGE_SCHEDULE_FILTER_ENABLED,
+            "edge_allowed_hours_utc": EDGE_ALLOWED_HOURS_UTC,
+            "edge_allowed_weekdays_utc": EDGE_ALLOWED_WEEKDAYS_UTC,
         },
         "stats": compute_stats(),
         "last_webhook": state.get("_last_webhook"),
