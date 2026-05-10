@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 APP_NAME = "Railway Forex Pro Scalper"
-APP_VERSION = "7.0.0"
+APP_VERSION = "7.4.0"
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 STATE_LOCK = threading.Lock()
 
@@ -149,6 +149,58 @@ def model_to_dict(model: BaseModel) -> dict:
     if hasattr(model, "model_dump"):
         return model.model_dump()
     return model.dict()
+
+
+def parse_tradingview_payload(raw_body: str) -> dict:
+    """Aceita JSON normal ou o formato simples key=value;key=value.
+
+    O formato key=value evita erros do Pine Editor mobile com chaves { } e
+    str.format(). Mantemos JSON por compatibilidade com versões anteriores.
+    """
+    raw_body = (raw_body or "").strip()
+    if not raw_body:
+        raise ValueError("corpo vazio")
+
+    # 1) JSON objeto: {"symbol":"EURUSD", ...}
+    # 2) JSON string contendo outro JSON: "{...}"
+    try:
+        payload = json.loads(raw_body)
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+
+    # 3) Fallback ultra-compativel: symbol=EURUSD;timeframe=1;open=...
+    parsed: dict[str, Any] = {}
+    for part in raw_body.replace("\n", ";").split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if key:
+            parsed[key] = value
+
+    if not parsed:
+        raise ValueError("formato nao reconhecido")
+
+    # Normalizacao dos campos numericos esperados pelo Pydantic.
+    for key in ["time", "open", "high", "low", "close", "volume", "bid", "ask"]:
+        if key in parsed and parsed[key] not in ("", None):
+            try:
+                parsed[key] = float(str(parsed[key]).replace(",", "."))
+            except Exception:
+                # time pode vir como string em alguns ativos; deixa o Pydantic/fluxo lidar.
+                pass
+
+    # Campos booleanos opcionais.
+    if "news" in parsed:
+        parsed["news"] = str(parsed["news"]).lower() in {"1", "true", "yes", "sim"}
+
+    return parsed
 
 
 def norm_symbol(symbol: str) -> str:
@@ -562,6 +614,33 @@ def append_candle(symbol: str, timeframe: str, candle: Candle) -> List[Candle]:
         state[key] = raw_candles
         save_state_unlocked(state)
         return [Candle(**item) for item in raw_candles]
+
+
+def record_webhook_event(status: str, raw_body: str, parsed: Optional[dict] = None, error: Optional[Any] = None) -> None:
+    """Guarda o ultimo webhook recebido para facilitar debug no Railway.
+
+    Importante: webhook invalido agora retorna 200/ignored para nao poluir os logs
+    do Railway com 400 infinito, mas fica registrado em /webhook/debug.
+    """
+    try:
+        now = datetime.now(timezone.utc)
+        event = {
+            "status": status,
+            "timestamp_utc": now.isoformat(),
+            "received": (raw_body or "")[:1200],
+            "parsed": parsed or None,
+            "error": str(error)[:1200] if error is not None else None,
+        }
+        with STATE_LOCK:
+            state = load_state_unlocked()
+            state["_last_webhook"] = event
+            if status != "ok":
+                invalid = state.setdefault("_invalid_webhooks", [])
+                invalid.append(event)
+                state["_invalid_webhooks"] = invalid[-30:]
+            save_state_unlocked(state)
+    except Exception:
+        pass
 
 
 def cooldown_ok(state: dict, symbol: str, timeframe: str, candle_time: Optional[str]) -> tuple[bool, str]:
@@ -1265,6 +1344,8 @@ def api_status() -> dict:
             "allow_multiple_open_signals": ALLOW_MULTIPLE_OPEN_SIGNALS,
         },
         "stats": compute_stats(),
+        "last_webhook": state.get("_last_webhook"),
+        "invalid_webhooks": state.get("_invalid_webhooks", [])[-5:],
         "open_signals": state.get("_open_signals", {}),
         "latest_signals": state.get("_signal_history", [])[-10:],
     }
@@ -1329,7 +1410,7 @@ def dashboard() -> HTMLResponse:
         <div class='card'><div class='muted'>Sinais abertos</div><div class='num'>{stats['open_signals']}</div></div>
       </div>
       <div class='card'><h2>Últimos sinais</h2><table><thead><tr><th>Hora</th><th>Ativo</th><th>TF</th><th>Ação</th><th>Conf.</th><th>Qualidade</th></tr></thead><tbody>{rows}</tbody></table></div>
-      <p class='muted'>Endpoints: <code>/health</code> <code>/api/status</code> <code>/webhook/tradingview</code> <code>/telegram/test</code> <code>/stats</code></p>
+      <p class='muted'>Endpoints: <code>/health</code> <code>/api/status</code> <code>/webhook/tradingview</code> <code>/telegram/test</code> <code>/webhook/debug</code> <code>/stats</code></p>
     </div></body></html>"""
     return HTMLResponse(html_doc)
 
@@ -1348,27 +1429,33 @@ def signal(payload: SignalRequest) -> dict:
 @app.post("/webhook/tradingview")
 async def tradingview_webhook(request: Request) -> dict:
     raw_body = (await request.body()).decode("utf-8", errors="replace").strip()
+
     try:
-        raw_payload = json.loads(raw_body)
-        if isinstance(raw_payload, str):
-            raw_payload = json.loads(raw_payload)
+        raw_payload = parse_tradingview_payload(raw_body)
     except Exception as exc:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "Webhook recebeu corpo que nao e JSON valido.",
-                "received": raw_body[:500],
-                "hint": "No TradingView, use Any alert() function call e a mensagem criada pelo Pine Script.",
-            },
-        ) from exc
+        # Retorna 200 para evitar spam de 400 no Railway, mas registra para debug.
+        record_webhook_event("ignored_invalid_format", raw_body, error=exc)
+        return {
+            "status": "ignored",
+            "reason": "payload_invalido_ou_vazio",
+            "hint": "No TradingView, apague alertas antigos e crie um novo usando o Pine v7.4 com Any alert() function call.",
+            "received_preview": raw_body[:300],
+        }
+
     try:
         payload = TradingViewWebhook(**raw_payload)
     except ValidationError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "JSON valido, mas campos do candle estao faltando/invalidos.", "required_fields": ["symbol", "timeframe", "time", "open", "high", "low", "close", "volume"], "validation_errors": exc.errors(), "received": raw_payload},
-        ) from exc
+        record_webhook_event("ignored_validation_error", raw_body, parsed=raw_payload, error=exc)
+        return {
+            "status": "ignored",
+            "reason": "campos_obrigatorios_ausentes_ou_invalidos",
+            "required_fields": ["symbol", "timeframe", "time", "open", "high", "low", "close", "volume"],
+            "hint": "Confirme se o alerta ativo foi recriado depois de colar o Pine v7.4. Alertas antigos continuam enviando payload antigo.",
+            "received_preview": raw_body[:300],
+            "parsed": raw_payload,
+        }
 
+    record_webhook_event("ok", raw_body, parsed=raw_payload)
     candle = Candle(time=payload.time, open=payload.open, high=payload.high, low=payload.low, close=payload.close, volume=payload.volume, bid=payload.bid, ask=payload.ask)
     candles = append_candle(payload.symbol, payload.timeframe, candle)
     resolved_results = check_open_signals(payload.symbol, payload.timeframe, candle)
@@ -1380,7 +1467,17 @@ async def tradingview_webhook(request: Request) -> dict:
         register_open_signal(signal_result)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Erro ao enviar Telegram: {exc}") from exc
-    return {"signal": signal_result, "resolved_results": resolved_results, "stats": compute_stats()}
+    return {"status": "ok", "signal": signal_result, "resolved_results": resolved_results, "stats": compute_stats()}
+
+
+@app.get("/webhook/debug")
+def webhook_debug() -> dict:
+    state = load_state()
+    return {
+        "last_webhook": state.get("_last_webhook"),
+        "invalid_webhooks": state.get("_invalid_webhooks", [])[-10:],
+        "candles_status": {k: len(v) for k, v in state.items() if not k.startswith("_") and isinstance(v, list)},
+    }
 
 
 @app.post("/telegram/test")

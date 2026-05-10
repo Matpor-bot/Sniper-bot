@@ -1,4 +1,4 @@
-# Railway Forex Pro Scalper v7
+# Railway Forex Pro Scalper v7.4
 
 Bot profissional de sinais de scalping Forex/XAUUSD via **TradingView webhook + FastAPI + Railway + Telegram**.
 
@@ -52,7 +52,7 @@ https://SEU-APP.up.railway.app/telegram/test
 Use o arquivo:
 
 ```text
-tradingview_pro_scalper_v7.pine
+tradingview_pro_scalper_v7_3.pine
 ```
 
 Depois:
@@ -99,3 +99,15 @@ NEWS_BLACKOUT_WINDOWS_UTC=2026-05-10T12:25:00Z/2026-05-10T13:05:00Z;2026-05-12T1
 ## Observação importante
 
 Este bot é sinalizador. Ele não executa ordens. Nenhuma estratégia garante lucro. Valide em demo, ajuste por ativo/timeframe e considere spread, slippage e execução real antes de usar dinheiro real.
+
+
+## Correção v7.4
+
+- Corrigido o erro `can't parse argument number` causado pelo `str.format()` com chaves JSON no Pine mobile.
+- O Pine agora envia payload simples `key=value;key=value`, sem chaves `{}` e sem JSON.
+- O webhook do Railway aceita tanto JSON quanto o novo formato simples.
+
+
+## Debug de webhook
+
+Se o Railway mostrar requisições do TradingView, abra `/webhook/debug` para ver o último payload recebido. Na v7.4, payload inválido é ignorado com status 200 para não poluir os logs, mas fica salvo nessa tela.
