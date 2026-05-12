@@ -18,8 +18,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-APP_NAME = "Railway Forex Pro Scalper"
-APP_VERSION = "8.2.0"
+APP_NAME = "Railway Gold ORB Scalper"
+APP_VERSION = "10.0.0"
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 STATE_LOCK = threading.Lock()
 
@@ -28,7 +28,7 @@ STATE_LOCK = threading.Lock()
 # =========================
 STATE_FILE = Path(os.getenv("BOT_STATE_FILE", "bot_state.json"))
 SIGNALS_CSV = Path(os.getenv("BOT_SIGNALS_CSV", "signals_log.csv"))
-MAX_STORED_CANDLES = int(os.getenv("MAX_STORED_CANDLES", os.getenv("BOT_BARS", "320")))
+MAX_STORED_CANDLES = int(os.getenv("MAX_STORED_CANDLES", os.getenv("BOT_BARS", "420")))
 MAX_CLOSED_RESULTS = int(os.getenv("MAX_CLOSED_RESULTS", "500"))
 BOT_TIMEZONE = os.getenv("BOT_TIMEZONE", "America/Sao_Paulo")
 TIME_FORMAT = os.getenv("BOT_TIME_FORMAT", "%d/%m/%Y %H:%M:%S")
@@ -42,7 +42,7 @@ BOT_STARTUP_ALERT = os.getenv("BOT_STARTUP_ALERT", "true").lower() == "true"
 SEND_HOLD_SIGNALS = os.getenv("SEND_HOLD_SIGNALS", "false").lower() == "true"
 
 # Estrategia
-STRATEGY_NAME = os.getenv("STRATEGY_NAME", "Pro Scalper v8.2 Prime DD-Controlled M5 - EMA/ADX/MTF/Edge Schedule")
+STRATEGY_NAME = os.getenv("STRATEGY_NAME", "Gold ORB Scalper v10 - XAUUSD Opening Range Breakout")
 EMA_FAST = int(os.getenv("EMA_FAST", "9"))
 EMA_SLOW = int(os.getenv("EMA_SLOW", "21"))
 EMA_TREND = int(os.getenv("EMA_TREND", "75"))
@@ -59,13 +59,13 @@ VOLUME_PERIOD = int(os.getenv("VOLUME_PERIOD", "20"))
 BREAKOUT_LOOKBACK = int(os.getenv("BREAKOUT_LOOKBACK", "8"))
 CHOP_PERIOD = int(os.getenv("CHOP_PERIOD", "14"))
 
-SCORE_THRESHOLD = int(os.getenv("SCORE_THRESHOLD", "9"))
+SCORE_THRESHOLD = int(os.getenv("SCORE_THRESHOLD", "11"))
 SCORE_DIFF_MIN = int(os.getenv("SCORE_DIFF_MIN", "2"))
-MIN_ADX = float(os.getenv("MIN_ADX", "10"))
+MIN_ADX = float(os.getenv("MIN_ADX", "12"))
 MIN_ATR_PCT = float(os.getenv("MIN_ATR_PCT", "0.00004"))
 MAX_ATR_PCT = float(os.getenv("MAX_ATR_PCT", "0.006"))
 MIN_EMA_SEPARATION_PCT = float(os.getenv("MIN_EMA_SEPARATION_PCT", "0.00002"))
-MAX_CHOP = float(os.getenv("MAX_CHOP", "65"))
+MAX_CHOP = float(os.getenv("MAX_CHOP", "50"))
 MIN_VOLUME_MULT = float(os.getenv("MIN_VOLUME_MULT", "1.05"))
 MIN_BODY_RATIO = float(os.getenv("MIN_BODY_RATIO", "0.35"))
 MAX_CANDLE_ATR_MULT = float(os.getenv("MAX_CANDLE_ATR_MULT", "2.4"))
@@ -83,19 +83,40 @@ STRICT_ENTRY_MODE = os.getenv("STRICT_ENTRY_MODE", "true").lower() == "true"
 MACD_REQUIRE_HIST_SLOPE = os.getenv("MACD_REQUIRE_HIST_SLOPE", "false").lower() == "true"
 EMA_SLOPE_BARS = int(os.getenv("EMA_SLOPE_BARS", "5"))
 RECOMMENDED_TIMEFRAME = os.getenv("RECOMMENDED_TIMEFRAME", "M5")
-MAX_BARS_IN_SIGNAL = int(os.getenv("MAX_BARS_IN_SIGNAL", "5"))
+MAX_BARS_IN_SIGNAL = int(os.getenv("MAX_BARS_IN_SIGNAL", "22"))
 TIMEOUT_CLOSE_AS_RESULT = os.getenv("TIMEOUT_CLOSE_AS_RESULT", "true").lower() == "true"
 
+# v10: Gold ORB Scalper — estratégia validada em XAUUSD Dukascopy 2023-2025.
+STRATEGY_MODE = os.getenv("STRATEGY_MODE", "GOLD_ORB_V10").upper()
+ORB_SYMBOL_ALLOWLIST = [s.strip().upper().replace("/", "") for s in os.getenv("ORB_SYMBOL_ALLOWLIST", "XAUUSD,GOLD").split(",") if s.strip()]
+ORB_TIMEFRAME_MINUTES = int(os.getenv("ORB_TIMEFRAME_MINUTES", "5"))
+ORB_START_MINUTE_UTC = int(os.getenv("ORB_START_MINUTE_UTC", "810"))  # 13:30 UTC
+ORB_RANGE_MINUTES = int(os.getenv("ORB_RANGE_MINUTES", "15"))
+ORB_TRADE_WINDOW_MINUTES = int(os.getenv("ORB_TRADE_WINDOW_MINUTES", "120"))
+ORB_DIRECTION = os.getenv("ORB_DIRECTION", "BUY_STOP").upper()
+ORB_BUFFER_MULT = float(os.getenv("ORB_BUFFER_MULT", "0.05"))
+ORB_STOP_RANGE_MULT = float(os.getenv("ORB_STOP_RANGE_MULT", "0.75"))
+ORB_TAKE_R = float(os.getenv("ORB_TAKE_R", "2.0"))
+ORB_MIN_RANGE_ATR = float(os.getenv("ORB_MIN_RANGE_ATR", "0.35"))
+ORB_MAX_RANGE_ATR = float(os.getenv("ORB_MAX_RANGE_ATR", "3.5"))
+ORB_MAX_RANGE_PCT = float(os.getenv("ORB_MAX_RANGE_PCT", "0.025"))
+ORB_MIN_STOP_POINTS = float(os.getenv("ORB_MIN_STOP_POINTS", "1.2"))
+ORB_MAX_STOP_POINTS = float(os.getenv("ORB_MAX_STOP_POINTS", "10.0"))
+ORB_ROUND_TURN_COST_POINTS = float(os.getenv("ORB_ROUND_TURN_COST_POINTS", "0.35"))
+ORB_ONE_TRADE_PER_DAY = os.getenv("ORB_ONE_TRADE_PER_DAY", "true").lower() == "true"
+ORB_SEND_PENDING_AT_RANGE_CLOSE = os.getenv("ORB_SEND_PENDING_AT_RANGE_CLOSE", "true").lower() == "true"
+ORB_PENDING_EXPIRE_BARS = int(os.getenv("ORB_PENDING_EXPIRE_BARS", str(max(1, ORB_TRADE_WINDOW_MINUTES // max(1, ORB_TIMEFRAME_MINUTES)))))
+
 # Risco / alvo
-ATR_STOP_MULT = float(os.getenv("ATR_STOP_MULT", "0.85"))
-ATR_TAKE_MULT = float(os.getenv("ATR_TAKE_MULT", "0.765"))
-MIN_STOP_PIPS = float(os.getenv("MIN_STOP_PIPS", "4"))
-MAX_STOP_PIPS = float(os.getenv("MAX_STOP_PIPS", "22"))
-MIN_STOP_XAU_PIPS = float(os.getenv("MIN_STOP_XAU_PIPS", "18"))
-MAX_STOP_XAU_PIPS = float(os.getenv("MAX_STOP_XAU_PIPS", "120"))
+ATR_STOP_MULT = float(os.getenv("ATR_STOP_MULT", "3.5"))
+ATR_TAKE_MULT = float(os.getenv("ATR_TAKE_MULT", "4.6"))
+MIN_STOP_PIPS = float(os.getenv("MIN_STOP_PIPS", "10"))
+MAX_STOP_PIPS = float(os.getenv("MAX_STOP_PIPS", "50"))
+MIN_STOP_XAU_PIPS = float(os.getenv("MIN_STOP_XAU_PIPS", "70"))
+MAX_STOP_XAU_PIPS = float(os.getenv("MAX_STOP_XAU_PIPS", "220"))
 ENTRY_ZONE_ATR_MULT = float(os.getenv("ENTRY_ZONE_ATR_MULT", "0.18"))
 ACCOUNT_BALANCE = float(os.getenv("ACCOUNT_BALANCE", "1000"))
-RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", "2.0"))
+RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", "1.0"))
 PIP_VALUE_PER_LOT_USD = float(os.getenv("PIP_VALUE_PER_LOT_USD", "10"))
 MIN_LOT = float(os.getenv("MIN_LOT", "0.01"))
 MAX_LOT = float(os.getenv("MAX_LOT", "5"))
@@ -106,10 +127,11 @@ SESSION_FILTER_ENABLED = os.getenv("SESSION_FILTER_ENABLED", "true").lower() == 
 # Padrao em UTC: Londres inicial + overlap Londres/NY. Ajuste no Railway se operar outro ativo/horario.
 SESSION_WINDOWS_UTC = os.getenv("SESSION_WINDOWS_UTC", "06:00-18:00")
 BLOCK_WEEKEND = os.getenv("BLOCK_WEEKEND", "true").lower() == "true"
-SYMBOL_ALLOWLIST = [s.strip().upper().replace("/", "") for s in os.getenv("SYMBOL_ALLOWLIST", "EURUSD,GBPUSD,USDJPY,USDCHF,USDCAD,AUDUSD,NZDUSD,XAUUSD").split(",") if s.strip()]
+SYMBOL_ALLOWLIST = [s.strip().upper().replace("/", "") for s in os.getenv("SYMBOL_ALLOWLIST", "USDJPY").split(",") if s.strip()]
 SPREAD_UNKNOWN_POLICY = os.getenv("SPREAD_UNKNOWN_POLICY", "ignore").lower()  # ignore | block
 MAX_SPREAD_PIPS = float(os.getenv("MAX_SPREAD_PIPS", "1.6"))
 MAX_SPREAD_XAU_PIPS = float(os.getenv("MAX_SPREAD_XAU_PIPS", "35"))
+MAX_SPREAD_PIPS_BY_SYMBOL = os.getenv("MAX_SPREAD_PIPS_BY_SYMBOL", "USDJPY:1.4")
 NEWS_BLACKOUT_ENABLED = os.getenv("NEWS_BLACKOUT_ENABLED", "false").lower() == "true"
 NEWS_BLACKOUT_WINDOWS_UTC = os.getenv("NEWS_BLACKOUT_WINDOWS_UTC", "")  # ex: 2026-05-10T12:25/2026-05-10T13:05;...
 BLOCK_HIGH_IMPACT_FLAG = os.getenv("BLOCK_HIGH_IMPACT_FLAG", "true").lower() == "true"
@@ -120,15 +142,29 @@ COOLDOWN_BARS = int(os.getenv("COOLDOWN_BARS", "0"))
 ALLOW_MULTIPLE_OPEN_SIGNALS = os.getenv("ALLOW_MULTIPLE_OPEN_SIGNALS", "false").lower() == "true"
 MAX_OPEN_SIGNALS = int(os.getenv("MAX_OPEN_SIGNALS", "50"))
 MAX_OPEN_SIGNALS_PER_MARKET = int(os.getenv("MAX_OPEN_SIGNALS_PER_MARKET", "1"))
-MAX_TOTAL_OPEN_SIGNALS = int(os.getenv("MAX_TOTAL_OPEN_SIGNALS", "2"))
+MAX_TOTAL_OPEN_SIGNALS = int(os.getenv("MAX_TOTAL_OPEN_SIGNALS", "1"))
 
 # v8.2: filtro de edge por ativo/hora UTC/dia da semana.
 # Dias: 0=segunda, 1=terca, 2=quarta, 3=quinta, 4=sexta.
 EDGE_SCHEDULE_FILTER_ENABLED = os.getenv("EDGE_SCHEDULE_FILTER_ENABLED", "true").lower() == "true"
-EDGE_ALLOWED_HOURS_UTC = os.getenv("EDGE_ALLOWED_HOURS_UTC", "EURUSD:6,7,10,12,13,15|GBPUSD:9,10,11,12|XAUUSD:8,10,12,13,16")
-EDGE_ALLOWED_WEEKDAYS_UTC = os.getenv("EDGE_ALLOWED_WEEKDAYS_UTC", "EURUSD:0,1,3|GBPUSD:3,4|XAUUSD:0,1,2,4")
+EDGE_ALLOWED_HOURS_UTC = os.getenv("EDGE_ALLOWED_HOURS_UTC", "USDJPY:0,1,2,13,14,15")
+EDGE_ALLOWED_WEEKDAYS_UTC = os.getenv("EDGE_ALLOWED_WEEKDAYS_UTC", "EURUSD:0,1,2,3,4|GBPUSD:0,1,2,3,4|USDJPY:0,1,2,3,4|AUDUSD:0,1,2,3,4|USDCAD:0,1,2,3,4|USDCHF:0,1,2,3,4|XAUUSD:0,1,2,3,4")
+# v9.1: filtro de hora + direcao validado em walk-forward.
+# Formato: SYMBOL:BUY@1,BUY@2,SELL@2,SELL@15|OUTRO:BUY@13
+ACTION_HOUR_EDGE_FILTER_ENABLED = os.getenv("ACTION_HOUR_EDGE_FILTER_ENABLED", "true").lower() == "true"
+ACTION_HOUR_EDGE_RULES_UTC = os.getenv("ACTION_HOUR_EDGE_RULES_UTC", "USDJPY:BUY@1,BUY@2,SELL@2,SELL@15")
 WIN_LOSS_ALERTS = os.getenv("WIN_LOSS_ALERTS", "true").lower() == "true"
 SAME_CANDLE_POLICY = os.getenv("SAME_CANDLE_POLICY", "conservative").lower()  # conservative | optimistic | skip
+
+# v8.3: filtros institucionais por ativo e protecao contra excesso de exposicao ao USD.
+PROFESSIONAL_PAIR_PROFILE_ENABLED = os.getenv("PROFESSIONAL_PAIR_PROFILE_ENABLED", "true").lower() == "true"
+SESSION_WINDOWS_BY_SYMBOL_UTC = os.getenv("SESSION_WINDOWS_BY_SYMBOL_UTC", "USDJPY:00:00-02:30,13:00-15:30")
+MIN_ATR_PCT_BY_SYMBOL = os.getenv("MIN_ATR_PCT_BY_SYMBOL", "USDJPY:0.00005")
+MAX_ATR_PCT_BY_SYMBOL = os.getenv("MAX_ATR_PCT_BY_SYMBOL", "USDJPY:0.00130")
+CORRELATION_GUARD_ENABLED = os.getenv("CORRELATION_GUARD_ENABLED", "true").lower() == "true"
+MAX_CORRELATED_USD_EXPOSURE = int(os.getenv("MAX_CORRELATED_USD_EXPOSURE", "1"))
+CORE_MAJOR_PAIRS = {"EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD"}
+GOLD_SYMBOLS = {"XAUUSD", "GOLD"}
 ENABLE_ADMIN_ENDPOINTS = os.getenv("ENABLE_ADMIN_ENDPOINTS", "false").lower() == "true"
 
 
@@ -229,7 +265,17 @@ def parse_tradingview_payload(raw_body: str) -> dict:
 
 
 def norm_symbol(symbol: str) -> str:
-    return str(symbol or "").upper().replace("/", "").replace(".", "").strip()
+    raw = str(symbol or "").upper().strip()
+    # Aceita formatos comuns do TradingView/corretoras: OANDA:EURUSD, FX:EUR/USD, XAUUSD.P, etc.
+    if ":" in raw:
+        raw = raw.split(":")[-1]
+    for token in ["/", ".", "_", "-", " "]:
+        raw = raw.replace(token, "")
+    # Remove sufixos comuns de CFD quando vierem no ticker.
+    for suffix in ["PRO", "RAW", "ECN", "CFD"]:
+        if raw.endswith(suffix) and len(raw) > len(suffix) + 3:
+            raw = raw[: -len(suffix)]
+    return raw
 
 
 def get_bot_timezone() -> ZoneInfo:
@@ -298,6 +344,10 @@ def pip_size(symbol: str, price: float) -> float:
 
 def max_spread_for_symbol(symbol: str) -> float:
     s = norm_symbol(symbol)
+    if PROFESSIONAL_PAIR_PROFILE_ENABLED:
+        mapped = parse_symbol_float_map(MAX_SPREAD_PIPS_BY_SYMBOL).get(s)
+        if mapped is not None:
+            return mapped
     return MAX_SPREAD_XAU_PIPS if s.startswith("XAU") or "GOLD" in s else MAX_SPREAD_PIPS
 
 
@@ -358,6 +408,98 @@ def parse_symbol_int_map(raw: str) -> dict[str, set[int]]:
     return out
 
 
+def parse_symbol_float_map(raw: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for block in str(raw or "").split("|"):
+        block = block.strip()
+        if not block or ":" not in block:
+            continue
+        sym, value = block.split(":", 1)
+        try:
+            out[norm_symbol(sym)] = float(value.strip().replace(",", "."))
+        except ValueError:
+            continue
+    return out
+
+
+def parse_symbol_windows_map(raw: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for block in str(raw or "").split("|"):
+        block = block.strip()
+        if not block or ":" not in block:
+            continue
+        sym, windows = block.split(":", 1)
+        windows = windows.strip()
+        if windows:
+            out[norm_symbol(sym)] = windows
+    return out
+
+
+def symbol_category(symbol: str) -> str:
+    sym = norm_symbol(symbol)
+    if sym in GOLD_SYMBOLS or sym.startswith("XAU"):
+        return "gold_cfd"
+    if sym in CORE_MAJOR_PAIRS:
+        return "core_major_fx"
+    if len(sym) == 6 and "USD" in sym:
+        return "usd_pair"
+    return "other"
+
+
+def profile_float(symbol: str, raw_map: str, default: float) -> float:
+    if not PROFESSIONAL_PAIR_PROFILE_ENABLED:
+        return default
+    mapping = parse_symbol_float_map(raw_map)
+    sym = norm_symbol(symbol)
+    return mapping.get(sym, default)
+
+
+def session_windows_for_symbol(symbol: str) -> str:
+    if not PROFESSIONAL_PAIR_PROFILE_ENABLED:
+        return SESSION_WINDOWS_UTC
+    mapping = parse_symbol_windows_map(SESSION_WINDOWS_BY_SYMBOL_UTC)
+    return mapping.get(norm_symbol(symbol), SESSION_WINDOWS_UTC)
+
+
+def usd_exposure(symbol: str, action: str) -> int:
+    """Retorna +1 para comprado em USD, -1 para vendido em USD, 0 para neutro/desconhecido."""
+    sym = norm_symbol(symbol)
+    action = str(action or "").upper()
+    if action not in {"BUY", "SELL"}:
+        return 0
+    if sym.startswith("XAU") or sym == "GOLD":
+        return -1 if action == "BUY" else 1
+    if len(sym) < 6 or "USD" not in sym:
+        return 0
+    base, quote = sym[:3], sym[3:6]
+    if base == "USD":
+        return 1 if action == "BUY" else -1
+    if quote == "USD":
+        return -1 if action == "BUY" else 1
+    return 0
+
+
+def correlation_guard_ok(state: dict, symbol: str, action: str) -> tuple[bool, str, dict]:
+    if not CORRELATION_GUARD_ENABLED:
+        return True, "proteção de correlação desativada", {"usd_exposure": 0, "same_exposure_open": 0}
+    exposure = usd_exposure(symbol, action)
+    if exposure == 0:
+        return True, "ativo sem exposição USD mensurável", {"usd_exposure": 0, "same_exposure_open": 0}
+    same = 0
+    details: list[str] = []
+    for market_signals in state.get("_open_signals", {}).values():
+        for sig in market_signals:
+            sig_exposure = usd_exposure(sig.get("symbol", ""), sig.get("action", ""))
+            if sig_exposure == exposure:
+                same += 1
+                details.append(f"{sig.get('symbol')} {sig.get('action')}")
+    ok = same < MAX_CORRELATED_USD_EXPOSURE
+    side = "comprado em USD" if exposure > 0 else "vendido em USD"
+    if ok:
+        return True, f"correlação ok: {same}/{MAX_CORRELATED_USD_EXPOSURE} sinais já {side}", {"usd_exposure": exposure, "same_exposure_open": same, "same_exposure_details": details}
+    return False, f"bloqueado por correlação: já existe {same}/{MAX_CORRELATED_USD_EXPOSURE} sinal {side} ({', '.join(details)})", {"usd_exposure": exposure, "same_exposure_open": same, "same_exposure_details": details}
+
+
 def edge_schedule_ok(symbol: str, dt_utc: datetime) -> tuple[bool, str]:
     if not EDGE_SCHEDULE_FILTER_ENABLED:
         return True, "edge schedule desativado"
@@ -371,6 +513,48 @@ def edge_schedule_ok(symbol: str, dt_utc: datetime) -> tuple[bool, str]:
     reason = f"hora UTC {dt_utc.hour:02d}:00 {'ok' if hour_ok else 'bloqueada'}; dia {dt_utc.weekday()} {'ok' if weekday_ok else 'bloqueado'}"
     return bool(hour_ok and weekday_ok), reason
 
+
+
+def parse_action_hour_rules(raw: str) -> dict[str, set[tuple[str, int]]]:
+    out: dict[str, set[tuple[str, int]]] = {}
+    for block in str(raw or "").split("|"):
+        block = block.strip()
+        if not block or ":" not in block:
+            continue
+        sym_raw, values = block.split(":", 1)
+        sym = norm_symbol(sym_raw)
+        rules: set[tuple[str, int]] = set()
+        for item in values.split(","):
+            item = item.strip().upper()
+            if not item or "@" not in item:
+                continue
+            action_raw, hour_raw = item.split("@", 1)
+            action = action_raw.strip().upper()
+            if action not in {"BUY", "SELL"}:
+                continue
+            try:
+                hour = int(hour_raw.strip())
+            except ValueError:
+                continue
+            if 0 <= hour <= 23:
+                rules.add((action, hour))
+        if rules:
+            out[sym] = rules
+    return out
+
+
+def action_hour_edge_ok(symbol: str, action: str, dt_utc: datetime) -> tuple[bool, str]:
+    if not ACTION_HOUR_EDGE_FILTER_ENABLED or action not in {"BUY", "SELL"}:
+        return True, "action-hour edge desativado ou sem sinal"
+    sym = norm_symbol(symbol)
+    rules = parse_action_hour_rules(ACTION_HOUR_EDGE_RULES_UTC).get(sym)
+    if not rules:
+        return True, f"sem regra action-hour para {sym}"
+    key = (action.upper(), int(dt_utc.hour))
+    if key in rules:
+        return True, f"regra validada: {sym} {action.upper()} às {dt_utc.hour:02d}:00 UTC"
+    allowed = ", ".join(f"{a}@{h:02d}" for a, h in sorted(rules, key=lambda x: (x[1], x[0])))
+    return False, f"fora das regras validadas para {sym}: {action.upper()}@{dt_utc.hour:02d}; permitido: {allowed}"
 
 def total_open_signals_count(state: dict) -> int:
     return sum(len(v) for v in state.get("_open_signals", {}).values())
@@ -755,6 +939,14 @@ def resolve_signal_with_candle(signal: dict, candle: Candle) -> Optional[dict]:
     action = signal.get("action")
     sl = safe_float(signal.get("stop_loss"))
     tp = safe_float(signal.get("take_profit"))
+    entry = safe_float(signal.get("entry"))
+
+    # v10: ordens pendentes. Antes da entrada tocar, SL/TP nao contam.
+    # Isso permite sinal tipo BUY_STOP no fechamento da faixa de abertura,
+    # alinhado ao backtest ORB. A ativacao e registrada em check_open_signals().
+    if str(signal.get("order_status", "ACTIVE")).upper() == "PENDING":
+        return None
+
     if action == "BUY":
         hit_tp = candle.high >= tp
         hit_sl = candle.low <= sl
@@ -863,6 +1055,43 @@ def check_open_signals(symbol: str, timeframe: str, candle: Candle) -> List[dict
             if candle_time and str(sig.get("timestamp_raw")) == candle_time:
                 still_open.append(sig)
                 continue
+
+            # v10: ativacao de ordem pendente no rompimento.
+            if str(sig.get("order_status", "ACTIVE")).upper() == "PENDING":
+                entry = safe_float(sig.get("entry"))
+                action = sig.get("action")
+                activated = (action == "BUY" and candle.high >= entry) or (action == "SELL" and candle.low <= entry)
+                if activated:
+                    sig["order_status"] = "ACTIVE"
+                    sig["activated_timestamp_raw"] = candle_time
+                    sig["activated_timestamp_utc"] = timestamp_fields(candle.time).get("timestamp_utc")
+                    sig["activation_reason"] = "Entrada pendente ativada pelo rompimento da ORB."
+                    still_open.append(sig)
+                    continue
+                bars_elapsed = bars_elapsed_for_signal(state, symbol, timeframe, sig)
+                if bars_elapsed >= int(sig.get("pending_expire_bars", ORB_PENDING_EXPIRE_BARS)):
+                    resolved.append({
+                        **timestamp_fields(candle.time),
+                        "result": "EXPIRADO",
+                        "hit_price": None,
+                        "reason": "Ordem pendente expirou sem tocar a entrada no tempo validado.",
+                        "signal": sig,
+                        "symbol": sig.get("symbol"),
+                        "timeframe": sig.get("timeframe"),
+                        "signal_id": sig.get("signal_id"),
+                        "action": action,
+                        "entry": sig.get("entry"),
+                        "stop_loss": sig.get("stop_loss"),
+                        "take_profit": sig.get("take_profit"),
+                        "candle_open": candle.open,
+                        "candle_high": candle.high,
+                        "candle_low": candle.low,
+                        "candle_close": candle.close,
+                    })
+                    continue
+                still_open.append(sig)
+                continue
+
             result = resolve_signal_with_candle(sig, candle)
             if result is None:
                 bars_elapsed = bars_elapsed_for_signal(state, symbol, timeframe, sig)
@@ -982,11 +1211,216 @@ def risk_block(entry: float, sl: float, tp: float, symbol: str) -> dict:
     }
 
 
+
+# =========================
+# v10 Gold ORB Scalper
+# =========================
+def _utc_minute(dt: datetime) -> int:
+    return dt.astimezone(timezone.utc).hour * 60 + dt.astimezone(timezone.utc).minute
+
+
+def _orb_today_already_has_signal(symbol: str, dt_utc: datetime) -> bool:
+    if not ORB_ONE_TRADE_PER_DAY:
+        return False
+    target_date = dt_utc.astimezone(timezone.utc).date().isoformat()
+    state = load_state()
+    candidates: list[dict] = []
+    candidates.extend(state.get("_signal_history", []))
+    candidates.extend(state.get("_closed_signals", []))
+    for bucket in state.get("_open_signals", {}).values():
+        if isinstance(bucket, list):
+            candidates.extend(bucket)
+    for item in candidates[-800:]:
+        if norm_symbol(item.get("symbol", "")) != symbol:
+            continue
+        if "Gold ORB" not in str(item.get("strategy", "")) and str(item.get("strategy_mode", "")).upper() != "GOLD_ORB_V10":
+            continue
+        ts = item.get("timestamp_utc") or item.get("activated_timestamp_utc")
+        if not ts:
+            sig = item.get("signal") if isinstance(item.get("signal"), dict) else {}
+            ts = sig.get("timestamp_utc") if sig else None
+        if not ts:
+            continue
+        try:
+            d = datetime.fromisoformat(str(ts).replace("Z", "+00:00")).astimezone(timezone.utc).date().isoformat()
+            if d == target_date:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def generate_gold_orb_v10(symbol: str, timeframe: str, candles: List[Candle], payload_flags: Optional[dict] = None) -> dict:
+    """Estratégia validada: XAUUSD M5 Opening Range Breakout.
+
+    Backtest Dukascopy 2023-2025:
+    - Ativo: XAUUSD BID M1 convertido para M5
+    - OR: 13:30-13:45 UTC
+    - Entrada: BUY STOP no topo da OR + 5% da amplitude
+    - SL: 0,75x amplitude da OR
+    - TP: 2R
+    - Janela de ativação: 120 minutos
+    - Custo estimado: 0,35 ponto round-turn
+    """
+    symbol = norm_symbol(symbol)
+    timeframe = str(timeframe or "5").upper()
+    if not candles:
+        return build_hold(symbol, timeframe, None, "Aguardando candles", 0)
+
+    last = candles[-1]
+    last_dt = parse_timestamp(last.time).astimezone(timezone.utc)
+    if symbol not in ORB_SYMBOL_ALLOWLIST and not (symbol.startswith("XAU") and "XAUUSD" in ORB_SYMBOL_ALLOWLIST):
+        return build_hold(symbol, timeframe, last, f"ORB v10 bloqueado: ativo permitido {ORB_SYMBOL_ALLOWLIST}", len(candles))
+    if timeframe_to_minutes(timeframe) != ORB_TIMEFRAME_MINUTES:
+        return build_hold(symbol, timeframe, last, f"ORB v10 requer gráfico M{ORB_TIMEFRAME_MINUTES}; recebido {timeframe}", len(candles))
+    if BLOCK_WEEKEND and last_dt.weekday() >= 5:
+        return build_hold(symbol, timeframe, last, "ORB v10 bloqueado no fim de semana", len(candles))
+    if _orb_today_already_has_signal(symbol, last_dt):
+        return build_hold(symbol, timeframe, last, "ORB v10: já existe trade/setup deste ativo hoje", len(candles))
+
+    # Histórico do dia UTC atual
+    parsed: list[tuple[datetime, Candle]] = []
+    for c in candles:
+        dt = parse_timestamp(c.time).astimezone(timezone.utc)
+        if dt.date() == last_dt.date():
+            parsed.append((dt, c))
+    parsed.sort(key=lambda x: x[0])
+    if len(parsed) < max(20, ATR_PERIOD + 5):
+        return build_hold(symbol, timeframe, last, f"ORB v10 aguardando historico intraday {len(parsed)}/{max(20, ATR_PERIOD + 5)}", len(candles))
+
+    # A OR usa candles com abertura em [13:30, 13:45) UTC por padrão.
+    range_start = ORB_START_MINUTE_UTC
+    range_end = ORB_START_MINUTE_UTC + ORB_RANGE_MINUTES
+    trade_end = range_end + ORB_TRADE_WINDOW_MINUTES
+    current_min = _utc_minute(last_dt)
+
+    range_items = [(dt, c) for dt, c in parsed if range_start <= _utc_minute(dt) < range_end]
+    if len(range_items) < max(2, ORB_RANGE_MINUTES // ORB_TIMEFRAME_MINUTES):
+        return build_hold(symbol, timeframe, last, "ORB v10 aguardando fechamento da faixa de abertura", len(candles))
+
+    # Só envia o setup logo depois da faixa fechar. O trade em si fica como ordem pendente.
+    # Se o alerta atrasar, ainda permite até a janela de ativação, mas não repete depois do setup diário.
+    if current_min < range_end:
+        return build_hold(symbol, timeframe, last, "ORB v10 faixa de abertura ainda em formação", len(candles))
+    if current_min >= trade_end:
+        return build_hold(symbol, timeframe, last, "ORB v10 janela operacional encerrada", len(candles))
+
+    all_items = [(dt, c) for dt, c in parsed if _utc_minute(dt) <= current_min]
+    highs = [safe_float(c.high) for _, c in all_items]
+    lows = [safe_float(c.low) for _, c in all_items]
+    closes = [safe_float(c.close) for _, c in all_items]
+    atr_series = atr_values(highs, lows, closes, ATR_PERIOD)
+    # ATR no fim da OR: índice do último candle da faixa dentro de all_items.
+    range_end_dt = range_items[-1][0]
+    end_idx = max(0, [dt for dt, _ in all_items].index(range_end_dt))
+    atr_val = float(atr_series[end_idx] or 0.0)
+    if atr_val <= 0:
+        return build_hold(symbol, timeframe, last, "ORB v10 aguardando ATR valido", len(candles))
+
+    range_high = max(safe_float(c.high) for _, c in range_items)
+    range_low = min(safe_float(c.low) for _, c in range_items)
+    range_width = max(0.0, range_high - range_low)
+    ref_close = safe_float(range_items[-1][1].close, safe_float(last.close))
+    if range_width <= 0 or ref_close <= 0:
+        return build_hold(symbol, timeframe, last, "ORB v10 faixa invalida", len(candles))
+
+    range_atr = range_width / atr_val
+    range_pct = range_width / ref_close
+    metrics = {
+        "orb_range_high": round_price(range_high, symbol, ref_close),
+        "orb_range_low": round_price(range_low, symbol, ref_close),
+        "orb_range_width": round_price(range_width, symbol, ref_close),
+        "orb_range_atr": round(range_atr, 3),
+        "orb_range_pct": round(range_pct * 100, 4),
+        "orb_start_utc": f"{ORB_START_MINUTE_UTC // 60:02d}:{ORB_START_MINUTE_UTC % 60:02d}",
+        "orb_range_minutes": ORB_RANGE_MINUTES,
+        "orb_trade_window_minutes": ORB_TRADE_WINDOW_MINUTES,
+        "atr": round_price(atr_val, symbol, ref_close),
+        "strategy_mode": "GOLD_ORB_V10",
+    }
+    if not (ORB_MIN_RANGE_ATR <= range_atr <= ORB_MAX_RANGE_ATR):
+        return build_hold(symbol, timeframe, last, f"ORB v10 bloqueou: range/ATR {range_atr:.2f} fora do filtro", len(candles), metrics)
+    if range_pct > ORB_MAX_RANGE_PCT:
+        return build_hold(symbol, timeframe, last, f"ORB v10 bloqueou: range_pct {range_pct:.4%} alto demais", len(candles), metrics)
+
+    pip = pip_size(symbol, ref_close)
+    buffer_points = range_width * ORB_BUFFER_MULT
+    stop_distance = min(max(range_width * ORB_STOP_RANGE_MULT, ORB_MIN_STOP_POINTS, ORB_ROUND_TURN_COST_POINTS * 2.5), ORB_MAX_STOP_POINTS)
+
+    # Estratégia validada é long-only no XAUUSD.
+    action = "BUY"
+    entry = range_high + buffer_points + ORB_ROUND_TURN_COST_POINTS / 2.0
+    sl = entry - stop_distance
+    tp = entry + stop_distance * ORB_TAKE_R
+    zone_low = entry - atr_val * ENTRY_ZONE_ATR_MULT
+    zone_high = entry + atr_val * ENTRY_ZONE_ATR_MULT
+    risk = risk_block(entry, sl, tp, symbol)
+    rr = round(risk["reward_pips"] / risk["risk_pips"], 2) if risk.get("risk_pips") else ORB_TAKE_R
+
+    # O setup deve ser enviado uma vez no fechamento da OR. Depois fica pendente até romper.
+    order_status = "PENDING" if ORB_SEND_PENDING_AT_RANGE_CLOSE else "ACTIVE"
+    reason = "Gold ORB v10: BUY STOP no rompimento da faixa de abertura 13:30-13:45 UTC"
+    confidence = 78
+    quality = "Validada" if range_atr <= 2.2 else "Agressiva"
+    signal = {
+        **timestamp_fields(last.time),
+        "strategy": STRATEGY_NAME,
+        "strategy_mode": "GOLD_ORB_V10",
+        "version": APP_VERSION,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "action": action,
+        "order_type": "BUY_STOP",
+        "order_status": order_status,
+        "pending_expire_bars": ORB_PENDING_EXPIRE_BARS,
+        "reason": reason,
+        "reasons": [
+            f"ORB high={round_price(range_high, symbol, ref_close)} low={round_price(range_low, symbol, ref_close)}",
+            f"Entrada BUY STOP = topo + {ORB_BUFFER_MULT:.2f}x range + custo estimado",
+            f"SL = {ORB_STOP_RANGE_MULT:.2f}x range | TP = {ORB_TAKE_R:.2f}R",
+            f"Range/ATR={range_atr:.2f} dentro de {ORB_MIN_RANGE_ATR}-{ORB_MAX_RANGE_ATR}",
+            "Backtest walk-forward positivo em 2023, 2024 e validação 2025",
+        ],
+        "entry": round_price(entry, symbol, ref_close),
+        "entry_zone": {"low": round_price(zone_low, symbol, ref_close), "high": round_price(zone_high, symbol, ref_close)},
+        "stop_loss": round_price(sl, symbol, ref_close),
+        "take_profit": round_price(tp, symbol, ref_close),
+        "rr_estimate": rr,
+        "confidence": confidence,
+        "quality": quality,
+        "buy_score": 10,
+        "sell_score": 0,
+        "score_diff": 10,
+        "score_threshold": 10,
+        "candles_count": len(candles),
+        "filters": {
+            "symbol_ok": True,
+            "timeframe_ok": True,
+            "orb_window_ok": True,
+            "one_trade_per_day": ORB_ONE_TRADE_PER_DAY,
+            "range_atr_ok": True,
+            "range_pct_ok": True,
+        },
+        "metrics": metrics,
+        "risk": risk,
+        "management": {
+            "order": "Coloque como ordem pendente BUY STOP. Nao entrar a mercado se ainda nao rompeu a entrada.",
+            "expire": f"Cancelar se nao ativar em {ORB_TRADE_WINDOW_MINUTES} minutos apos o fim da OR.",
+            "breakeven": "Opcional: mover SL para entrada apos +1R.",
+            "do_not_chase": "Se o preco romper sem pegar a ordem ou abrir com gap, nao perseguir.",
+        },
+    }
+    signal["signal_id"] = make_signal_id(signal)
+    return signal
+
 def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_flags: Optional[dict] = None) -> dict:
     symbol = norm_symbol(symbol)
     timeframe = str(timeframe or "M1").upper()
     if not candles:
         return build_hold(symbol, timeframe, None, "Aguardando candles", 0)
+
+    if STRATEGY_MODE == "GOLD_ORB_V10":
+        return generate_gold_orb_v10(symbol, timeframe, candles, payload_flags=payload_flags)
 
     last = candles[-1]
     last_dt = parse_timestamp(last.time)
@@ -1042,7 +1476,8 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     spread_limit = max_spread_for_symbol(symbol)
     spread_ok = True if spread_pips is None and SPREAD_UNKNOWN_POLICY != "block" else (spread_pips is not None and spread_pips <= spread_limit)
 
-    session_ok, session_reason = in_daily_windows(last_dt, SESSION_WINDOWS_UTC) if SESSION_FILTER_ENABLED else (True, "filtro de sessao desativado")
+    symbol_session_windows = session_windows_for_symbol(symbol)
+    session_ok, session_reason = in_daily_windows(last_dt, symbol_session_windows) if SESSION_FILTER_ENABLED else (True, "filtro de sessao desativado")
     edge_ok, edge_reason = edge_schedule_ok(symbol, last_dt)
     symbol_ok = not SYMBOL_ALLOWLIST or symbol in SYMBOL_ALLOWLIST
     weekend_ok = True
@@ -1082,7 +1517,9 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
 
     volume_available = max(volumes[-VOLUME_PERIOD:]) > 0
     volume_ok = (not volume_available) or (vol_ma <= 0) or (vol >= vol_ma * MIN_VOLUME_MULT)
-    volatility_ok = MIN_ATR_PCT <= atr_pct_raw <= MAX_ATR_PCT
+    min_atr_pct_profile = profile_float(symbol, MIN_ATR_PCT_BY_SYMBOL, MIN_ATR_PCT)
+    max_atr_pct_profile = profile_float(symbol, MAX_ATR_PCT_BY_SYMBOL, MAX_ATR_PCT)
+    volatility_ok = min_atr_pct_profile <= atr_pct_raw <= max_atr_pct_profile
     ema_sep_ok = abs(ef - es) / close >= MIN_EMA_SEPARATION_PCT
     chop_ok = (chop is None) or chop <= MAX_CHOP
     spike_ok = current_range_atr <= MAX_CANDLE_ATR_MULT
@@ -1146,6 +1583,10 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
         "volume": round(vol, 2),
         "volume_ma": round(vol_ma, 2),
         "spread_pips": round(spread_pips, 2) if spread_pips is not None else None,
+        "symbol_category": symbol_category(symbol),
+        "profile_min_atr_pct": round(min_atr_pct_profile * 100.0, 4),
+        "profile_max_atr_pct": round(max_atr_pct_profile * 100.0, 4),
+        "session_windows_used_utc": symbol_session_windows,
         "mtf": mtf,
     }
 
@@ -1153,6 +1594,8 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
         "symbol_ok": symbol_ok,
         "session_ok": session_ok,
         "session_reason": session_reason,
+        "session_windows_used_utc": symbol_session_windows,
+        "symbol_category": symbol_category(symbol),
         "edge_schedule_ok": edge_ok,
         "edge_schedule_reason": edge_reason,
         "edge_allowed_hours_utc": EDGE_ALLOWED_HOURS_UTC,
@@ -1292,6 +1735,43 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
         selected_reasons = sell_reasons
         selected_score = sell_score
 
+    if action in {"BUY", "SELL"}:
+        action_hour_ok, action_hour_reason = action_hour_edge_ok(symbol, action, last_dt)
+        filters["action_hour_edge_ok"] = action_hour_ok
+        filters["action_hour_edge_reason"] = action_hour_reason
+        if not action_hour_ok:
+            hold = build_hold(symbol, timeframe, last, "Filtro bloqueou sinal: action_hour_edge_ok", len(candles), current_metrics | {"filters": filters})
+            hold.update({
+                "buy_score": int(buy_score),
+                "sell_score": int(sell_score),
+                "score_diff": int(diff),
+                "reasons": selected_reasons[:10] + [action_hour_reason],
+                "filters": filters,
+            })
+            hold["signal_id"] = make_signal_id(hold)
+            return hold
+
+        corr_ok, corr_reason, corr_details = correlation_guard_ok(state, symbol, action)
+        filters["correlation_guard_ok"] = corr_ok
+        filters["correlation_guard_reason"] = corr_reason
+        filters["correlation_guard"] = corr_details
+        if not corr_ok:
+            hold = build_hold(symbol, timeframe, last, "Filtro bloqueou sinal: correlation_guard_ok", len(candles), current_metrics | {"filters": filters})
+            hold.update({
+                "buy_score": int(buy_score),
+                "sell_score": int(sell_score),
+                "score_diff": int(diff),
+                "reasons": selected_reasons[:10] + [corr_reason],
+                "filters": filters,
+            })
+            hold["signal_id"] = make_signal_id(hold)
+            return hold
+    else:
+        filters["correlation_guard_ok"] = True
+        filters["correlation_guard_reason"] = "nao avaliado sem sinal"
+        filters["action_hour_edge_ok"] = True
+        filters["action_hour_edge_reason"] = "nao avaliado sem sinal"
+
     if action == "HOLD":
         signal = build_hold(symbol, timeframe, last, reason, len(candles), current_metrics | {"filters": filters})
         signal.update({
@@ -1399,6 +1879,29 @@ def format_signal(signal: dict) -> str:
     reasons = signal.get("reasons", []) or [signal.get("reason", "-")]
     reasons_text = "\n".join(f"• {esc(str(x))}" for x in reasons[:7])
     direction = "COMPRA" if action == "BUY" else "VENDA" if action == "SELL" else "AGUARDAR"
+    if str(signal.get("strategy_mode", "")).upper() == "GOLD_ORB_V10":
+        order = signal.get("order_type", "-")
+        status = signal.get("order_status", "-")
+        management = signal.get("management", {}) or {}
+        return "\n".join([
+            f"🥇 <b>GOLD ORB v10 — {esc(str(order))}</b> | <b>{esc(signal.get('symbol','-'))}</b> {esc(signal.get('timeframe','-'))}",
+            f"Status: <b>{esc(str(status))}</b> | Qualidade: <b>{esc(signal.get('quality','-'))}</b> | Confiança: <b>{signal.get('confidence',0)}%</b>",
+            f"ID: <code>{esc(signal.get('signal_id', '-'))}</code>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"Entrada pendente: <b>{fmt_value(signal.get('entry'))}</b>",
+            f"SL: <b>{fmt_value(signal.get('stop_loss'))}</b> | TP: <b>{fmt_value(signal.get('take_profit'))}</b> | RR: <b>{fmt_value(signal.get('rr_estimate'))}</b>",
+            f"Risco: <b>{risk.get('risk_pips','-')} pips</b> | Alvo: <b>{risk.get('reward_pips','-')} pips</b> | Lote est.: <b>{risk.get('estimated_lot','-')}</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"ORB High: <b>{fmt_value(metrics.get('orb_range_high'))}</b> | ORB Low: <b>{fmt_value(metrics.get('orb_range_low'))}</b>",
+            f"Range/ATR: <b>{metrics.get('orb_range_atr','-')}</b> | Range: <b>{fmt_value(metrics.get('orb_range_width'))}</b>",
+            f"Janela: <b>{metrics.get('orb_start_utc','13:30')} UTC</b> por <b>{metrics.get('orb_range_minutes','-')} min</b> | Expira em <b>{metrics.get('orb_trade_window_minutes','-')} min</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"<b>Motivos:</b>\n{reasons_text}",
+            f"Gestão: {esc(str(management.get('order','Usar como ordem pendente.')))}",
+            f"Expiração: {esc(str(management.get('expire','Cancelar se não ativar.')))}",
+            f"Horário: {esc(signal.get('timestamp_display') or signal.get('timestamp_utc') or '-')}",
+            "\n⚠️ Alto risco. Use demo primeiro e respeite limite de perda diária.",
+        ])
     return "\n".join([
         f"{emoji} <b>SINAL {esc(direction)}</b> | <b>{esc(signal.get('symbol','-'))}</b> {esc(signal.get('timeframe','-'))}",
         f"<b>{esc(signal.get('strategy', STRATEGY_NAME))}</b>",
@@ -1416,7 +1919,9 @@ def format_signal(signal: dict) -> str:
         "━━━━━━━━━━━━━━━━━━━━",
         f"RSI {metrics.get('rsi','-')} | ADX {metrics.get('adx','-')} | ATR% {metrics.get('atr_pct','-')} | CHOP {metrics.get('choppiness','-')}",
         f"VWAP {metrics.get('vwap','-')} | Spread {metrics.get('spread_pips','n/i')} pips | Sessão: {esc(str(filters.get('session_reason','-')))}",
-        f"Filtro edge v8.2: {esc(str(filters.get('edge_schedule_reason','-')))}",
+        f"Perfil: {esc(str(metrics.get('symbol_category','-')))} | Janela: {esc(str(metrics.get('session_windows_used_utc','-')))}",
+        f"Filtro edge v8.3: {esc(str(filters.get('edge_schedule_reason','-')))}",
+        f"Correlação USD: {esc(str(filters.get('correlation_guard_reason','-')))}",
         f"MTF: {esc(str((metrics.get('mtf') or {}).get('bias','-')))} — {esc(str((metrics.get('mtf') or {}).get('reason','-')))}",
         "━━━━━━━━━━━━━━━━━━━━",
         f"<b>Motivos:</b>\n{reasons_text}",
@@ -1481,11 +1986,19 @@ def api_status() -> dict:
             "score_diff_min": SCORE_DIFF_MIN,
             "session_filter_enabled": SESSION_FILTER_ENABLED,
             "session_windows_utc": SESSION_WINDOWS_UTC,
+            "professional_pair_profile_enabled": PROFESSIONAL_PAIR_PROFILE_ENABLED,
+            "session_windows_by_symbol_utc": SESSION_WINDOWS_BY_SYMBOL_UTC,
+            "symbol_allowlist": SYMBOL_ALLOWLIST,
+            "correlation_guard_enabled": CORRELATION_GUARD_ENABLED,
+            "max_correlated_usd_exposure": MAX_CORRELATED_USD_EXPOSURE,
             "multi_timeframe_confirmation": MULTI_TIMEFRAME_CONFIRMATION,
             "mtf_factor": MTF_FACTOR,
             "risk_per_trade_pct": RISK_PER_TRADE_PCT,
             "max_spread_pips": MAX_SPREAD_PIPS,
             "max_spread_xau_pips": MAX_SPREAD_XAU_PIPS,
+            "max_spread_pips_by_symbol": MAX_SPREAD_PIPS_BY_SYMBOL,
+            "min_atr_pct_by_symbol": MIN_ATR_PCT_BY_SYMBOL,
+            "max_atr_pct_by_symbol": MAX_ATR_PCT_BY_SYMBOL,
             "allow_multiple_open_signals": ALLOW_MULTIPLE_OPEN_SIGNALS,
             "max_open_signals_per_market": MAX_OPEN_SIGNALS_PER_MARKET,
             "max_total_open_signals": MAX_TOTAL_OPEN_SIGNALS,
