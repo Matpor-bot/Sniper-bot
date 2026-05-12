@@ -19,9 +19,11 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 APP_NAME = "Railway Gold ORB Scalper"
-APP_VERSION = "10.0.0"
+APP_VERSION = "10.1.0"
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 STATE_LOCK = threading.Lock()
+DASHBOARD_REFRESH_MS = int(os.getenv("DASHBOARD_REFRESH_MS", "2000"))
+TRADINGVIEW_DASHBOARD_SYMBOL = os.getenv("TRADINGVIEW_DASHBOARD_SYMBOL", "OANDA:XAUUSD")
 
 # =========================
 # Configuracao por variaveis
@@ -2045,36 +2047,451 @@ def candles_status() -> dict:
     }
 
 
+
+
+def _flatten_open_signals_from_state(state: dict) -> list[dict]:
+    items: list[dict] = []
+    for key, bucket in (state.get("_open_signals", {}) or {}).items():
+        if not isinstance(bucket, list):
+            continue
+        for sig in bucket:
+            if isinstance(sig, dict):
+                item = dict(sig)
+                item.setdefault("market_key", key)
+                items.append(item)
+    items.sort(key=lambda x: str(x.get("timestamp_utc") or x.get("timestamp_raw") or ""), reverse=True)
+    return items
+
+
+def _market_keys_for_symbol(state: dict, symbol: str, timeframe: str = "") -> list[str]:
+    symbol = norm_symbol(symbol)
+    tf = str(timeframe or "").upper().strip()
+    keys: list[str] = []
+    preferred = state_key(symbol, tf or RECOMMENDED_TIMEFRAME)
+    if preferred in state and isinstance(state.get(preferred), list):
+        keys.append(preferred)
+    for key, value in state.items():
+        if key.startswith("_") or not isinstance(value, list):
+            continue
+        if "::" not in key:
+            continue
+        sym, key_tf = key.split("::", 1)
+        if sym == symbol and (not tf or key_tf == tf) and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def _last_candle_snapshot(state: dict, symbol: str = "XAUUSD", timeframe: str = "M5") -> dict:
+    keys = _market_keys_for_symbol(state, symbol, timeframe)
+    if not keys:
+        # Se nao houver XAUUSD ainda, mostra o mercado mais recente disponível.
+        for key, value in state.items():
+            if not key.startswith("_") and isinstance(value, list) and value:
+                keys = [key]
+                break
+    if not keys:
+        return {"available": False, "reason": "Nenhum candle recebido ainda. Crie o alerta no TradingView para alimentar o painel."}
+    key = keys[0]
+    raw = state.get(key, []) or []
+    if not raw:
+        return {"available": False, "market_key": key, "reason": "Mercado sem candles."}
+    last = raw[-1]
+    prev = raw[-2] if len(raw) >= 2 else last
+    sym, tf = key.split("::", 1) if "::" in key else (symbol, timeframe)
+    close = safe_float(last.get("close"))
+    prev_close = safe_float(prev.get("close"), close)
+    high = safe_float(last.get("high"))
+    low = safe_float(last.get("low"))
+    open_ = safe_float(last.get("open"))
+    bid = last.get("bid")
+    ask = last.get("ask")
+    spread = None
+    spread_pips = None
+    if bid is not None and ask is not None:
+        b, a = safe_float(bid), safe_float(ask)
+        if a >= b > 0:
+            spread = round_price(a - b, sym, close)
+            spread_pips = round((a - b) / pip_size(sym, close), 2)
+    dt = parse_timestamp(last.get("time"))
+    now = datetime.now(timezone.utc)
+    age = max(0, int((now - dt).total_seconds()))
+    change = close - prev_close
+    change_pct = (change / prev_close * 100) if prev_close else 0.0
+    return {
+        "available": True,
+        "market_key": key,
+        "symbol": sym,
+        "timeframe": tf,
+        "timestamp": timestamp_fields(last.get("time")),
+        "age_seconds": age,
+        "is_fresh": age <= max(180, ORB_TIMEFRAME_MINUTES * 60 * 2),
+        "open": round_price(open_, sym, close),
+        "high": round_price(high, sym, close),
+        "low": round_price(low, sym, close),
+        "close": round_price(close, sym, close),
+        "volume": last.get("volume"),
+        "change": round_price(change, sym, close),
+        "change_pct": round(change_pct, 3),
+        "bid": bid,
+        "ask": ask,
+        "spread": spread,
+        "spread_pips": spread_pips,
+        "candles_loaded": len(raw),
+    }
+
+
+def _recent_candles_payload(state: dict, symbol: str = "XAUUSD", timeframe: str = "M5", limit: int = 120) -> list[dict]:
+    keys = _market_keys_for_symbol(state, symbol, timeframe)
+    if not keys:
+        return []
+    raw = state.get(keys[0], [])[-max(1, min(limit, 500)):]
+    out: list[dict] = []
+    for item in raw:
+        try:
+            out.append({
+                "time": item.get("time"),
+                "timestamp_utc": parse_timestamp(item.get("time")).isoformat(),
+                "open": safe_float(item.get("open")),
+                "high": safe_float(item.get("high")),
+                "low": safe_float(item.get("low")),
+                "close": safe_float(item.get("close")),
+                "volume": safe_float(item.get("volume")),
+            })
+        except Exception:
+            continue
+    return out
+
+
+def _backtest_dashboard_summary() -> dict:
+    path = Path("v10_gold_orb_summary.json")
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        risk_pct = float(RISK_PER_TRADE_PCT)
+        total_rows = [x for x in data.get("risk_table", []) if str(x.get("period")) == "total_2023_2025"]
+        chosen = None
+        if total_rows:
+            chosen = min(total_rows, key=lambda x: abs(float(x.get("risk_pct", 0)) - risk_pct))
+        return {
+            "strategy": data.get("selected_strategy", {}),
+            "current_risk_match": chosen or {},
+            "risk_table": data.get("risk_table", []),
+            "by_year": data.get("by_year", []),
+            "asset_comparison_top": data.get("asset_comparison_top", []),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _orb_live_context(state: dict, symbol: str = "XAUUSD", timeframe: str = "M5") -> dict:
+    snapshot = _last_candle_snapshot(state, symbol, timeframe)
+    open_signals = _flatten_open_signals_from_state(state)
+    orb_open = [x for x in open_signals if str(x.get("strategy_mode", "")).upper() == "GOLD_ORB_V10"]
+    if orb_open:
+        sig = orb_open[0]
+        status = str(sig.get("order_status", "ACTIVE")).upper()
+        return {
+            "phase": "PENDING_ORDER" if status == "PENDING" else "ACTIVE_TRADE",
+            "phase_label": "Ordem pendente aguardando rompimento" if status == "PENDING" else "Trade ativo monitorando TP/SL",
+            "signal": sig,
+            "range": sig.get("metrics", {}),
+            "minutes_to_next_step": None,
+        }
+    if not snapshot.get("available"):
+        return {"phase": "NO_DATA", "phase_label": "Aguardando dados do TradingView", "range": {}, "signal": None, "minutes_to_next_step": None}
+    # Usa o timestamp do ultimo candle para mostrar a fase do setup no dia do mercado.
+    try:
+        dt = datetime.fromisoformat(snapshot["timestamp"]["timestamp_utc"]).astimezone(timezone.utc)
+    except Exception:
+        dt = datetime.now(timezone.utc)
+    current_min = _utc_minute(dt)
+    range_start = ORB_START_MINUTE_UTC
+    range_end = ORB_START_MINUTE_UTC + ORB_RANGE_MINUTES
+    trade_end = range_end + ORB_TRADE_WINDOW_MINUTES
+    phase = "WAITING_RANGE"
+    label = "Aguardando início da faixa de abertura"
+    next_min = range_start
+    if current_min < range_start:
+        phase, label, next_min = "WAITING_RANGE", "Aguardando faixa de abertura", range_start
+    elif current_min < range_end:
+        phase, label, next_min = "BUILDING_RANGE", "Faixa ORB em formação", range_end
+    elif current_min < trade_end:
+        phase, label, next_min = "TRADE_WINDOW", "Janela de trade aberta — aguardando setup", trade_end
+    else:
+        phase, label, next_min = "FINISHED", "Janela operacional encerrada", None
+    # Calcula faixa do dia se houver candles suficientes.
+    range_info: dict[str, Any] = {}
+    keys = _market_keys_for_symbol(state, snapshot.get("symbol", symbol), snapshot.get("timeframe", timeframe))
+    if keys:
+        parsed: list[tuple[datetime, dict]] = []
+        for c in state.get(keys[0], []):
+            cdt = parse_timestamp(c.get("time")).astimezone(timezone.utc)
+            if cdt.date() == dt.date():
+                parsed.append((cdt, c))
+        items = [(cdt, c) for cdt, c in parsed if range_start <= _utc_minute(cdt) < range_end]
+        if items:
+            highs = [safe_float(c.get("high")) for _, c in items]
+            lows = [safe_float(c.get("low")) for _, c in items]
+            rh, rl = max(highs), min(lows)
+            ref = safe_float(items[-1][1].get("close"), snapshot.get("close", 0) or 0)
+            width = rh - rl
+            range_info = {
+                "orb_range_high": round_price(rh, snapshot.get("symbol", symbol), ref),
+                "orb_range_low": round_price(rl, snapshot.get("symbol", symbol), ref),
+                "orb_range_width": round_price(width, snapshot.get("symbol", symbol), ref),
+                "orb_buffer_points": round_price(width * ORB_BUFFER_MULT, snapshot.get("symbol", symbol), ref),
+                "estimated_buy_stop": round_price(rh + width * ORB_BUFFER_MULT + ORB_ROUND_TURN_COST_POINTS / 2, snapshot.get("symbol", symbol), ref),
+                "candles_in_range": len(items),
+            }
+    mins = None
+    if next_min is not None:
+        mins = next_min - current_min if next_min >= current_min else None
+    return {"phase": phase, "phase_label": label, "range": range_info, "signal": None, "minutes_to_next_step": mins}
+
+
+def _live_activity_from_state(state: dict, limit: int = 20) -> list[dict]:
+    activity: list[dict] = []
+    for sig in state.get("_signal_history", [])[-limit:]:
+        if isinstance(sig, dict):
+            activity.append({"type": "signal", "time": sig.get("timestamp_local") or sig.get("timestamp_utc"), "title": f"{sig.get('symbol','-')} {sig.get('order_type', sig.get('action','-'))}", "status": sig.get("order_status") or sig.get("quality"), "payload": sig})
+    for res in state.get("_closed_signals", [])[-limit:]:
+        if isinstance(res, dict):
+            activity.append({"type": "result", "time": res.get("timestamp_local") or res.get("timestamp_utc"), "title": f"{res.get('symbol','-')} {res.get('result','-')}", "status": res.get("reason"), "payload": res})
+    last = state.get("_last_webhook")
+    if isinstance(last, dict):
+        activity.append({"type": "webhook", "time": last.get("timestamp_utc"), "title": "Último webhook recebido", "status": last.get("status"), "payload": last})
+    activity.sort(key=lambda x: str(x.get("time") or ""), reverse=True)
+    return activity[:limit]
+
+
+@app.get("/api/live")
+def api_live(symbol: str = "XAUUSD", timeframe: str = "M5", candles: int = 160) -> dict:
+    state = load_state()
+    stats = compute_stats()
+    snapshot = _last_candle_snapshot(state, symbol, timeframe)
+    closed = state.get("_closed_signals", [])[-25:][::-1]
+    open_signals = _flatten_open_signals_from_state(state)
+    return {
+        "server": {
+            "app": APP_NAME,
+            "version": APP_VERSION,
+            "strategy": STRATEGY_NAME,
+            "strategy_mode": STRATEGY_MODE,
+            "time_utc": datetime.now(timezone.utc).isoformat(),
+            "time_local": datetime.now(timezone.utc).astimezone(get_bot_timezone()).strftime(TIME_FORMAT),
+            "timezone": getattr(get_bot_timezone(), "key", "UTC"),
+            "telegram_enabled": telegram_enabled(),
+            "refresh_ms": DASHBOARD_REFRESH_MS,
+        },
+        "market": snapshot,
+        "orb": _orb_live_context(state, symbol, timeframe),
+        "stats": stats,
+        "open_signals": open_signals,
+        "closed_signals": closed,
+        "latest_signals": state.get("_signal_history", [])[-20:][::-1],
+        "activity": _live_activity_from_state(state, 25),
+        "candles": _recent_candles_payload(state, symbol, timeframe, candles),
+        "last_webhook": state.get("_last_webhook"),
+        "invalid_webhooks": state.get("_invalid_webhooks", [])[-5:],
+        "settings": {
+            "symbol_allowlist": SYMBOL_ALLOWLIST,
+            "orb_symbol_allowlist": ORB_SYMBOL_ALLOWLIST,
+            "risk_per_trade_pct": RISK_PER_TRADE_PCT,
+            "account_balance": ACCOUNT_BALANCE,
+            "orb_start_utc": f"{ORB_START_MINUTE_UTC // 60:02d}:{ORB_START_MINUTE_UTC % 60:02d}",
+            "orb_range_minutes": ORB_RANGE_MINUTES,
+            "orb_trade_window_minutes": ORB_TRADE_WINDOW_MINUTES,
+            "orb_direction": ORB_DIRECTION,
+            "orb_buffer_mult": ORB_BUFFER_MULT,
+            "orb_stop_range_mult": ORB_STOP_RANGE_MULT,
+            "orb_take_r": ORB_TAKE_R,
+            "orb_round_turn_cost_points": ORB_ROUND_TURN_COST_POINTS,
+        },
+        "backtest": _backtest_dashboard_summary(),
+    }
+
+
+@app.get("/api/candles/{symbol}/{timeframe}")
+def api_candles(symbol: str, timeframe: str, limit: int = 200) -> dict:
+    state = load_state()
+    return {"symbol": norm_symbol(symbol), "timeframe": str(timeframe).upper(), "candles": _recent_candles_payload(state, symbol, timeframe, limit)}
+
+
+@app.get("/api/backtest-summary")
+def api_backtest_summary() -> dict:
+    return _backtest_dashboard_summary()
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    stats = compute_stats()
-    state = load_state()
-    latest = state.get("_signal_history", [])[-8:][::-1]
-    rows = "".join(
-        f"<tr><td>{html.escape(x.get('timestamp_local','-'))}</td><td>{html.escape(x.get('symbol','-'))}</td><td>{html.escape(x.get('timeframe','-'))}</td><td>{html.escape(x.get('action','-'))}</td><td>{x.get('confidence',0)}%</td><td>{html.escape(str(x.get('quality','-')))}</td></tr>"
-        for x in latest
-    ) or "<tr><td colspan='6'>Sem sinais ainda.</td></tr>"
-    html_doc = f"""
-    <!doctype html><html lang='pt-BR'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-    <title>{APP_NAME}</title>
-    <style>
-      body{{margin:0;background:#080d17;color:#e5eefc;font-family:Inter,Arial,sans-serif}} .wrap{{max-width:1100px;margin:0 auto;padding:22px}}
-      .hero{{padding:22px;border:1px solid #1d2a44;border-radius:22px;background:linear-gradient(135deg,#101a2d,#08111f);box-shadow:0 18px 60px #0008}}
-      h1{{margin:0;font-size:28px}} .muted{{color:#8ea2c6}} .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin:18px 0}}
-      .card{{border:1px solid #1d2a44;border-radius:18px;padding:16px;background:#0b1322}} .num{{font-size:28px;font-weight:800}}
-      table{{width:100%;border-collapse:collapse;overflow:hidden;border-radius:16px}} th,td{{padding:11px;border-bottom:1px solid #1d2a44;text-align:left}} th{{color:#9fb5db;background:#0b1322}}
-      .ok{{color:#62e6a6}} .bad{{color:#ff7a90}} code{{background:#0b1322;padding:2px 6px;border-radius:7px}}
-    </style></head><body><div class='wrap'>
-      <div class='hero'><h1>⚡ {APP_NAME}</h1><p class='muted'>Versão {APP_VERSION} • {html.escape(STRATEGY_NAME)}</p><p>Status: <span class='ok'>online</span> • Telegram: {'ativo' if telegram_enabled() else 'desativado'} • Estado: <code>{html.escape(str(STATE_FILE))}</code></p></div>
-      <div class='grid'>
-        <div class='card'><div class='muted'>WIN</div><div class='num ok'>{stats['wins']}</div></div>
-        <div class='card'><div class='muted'>LOSS</div><div class='num bad'>{stats['losses']}</div></div>
-        <div class='card'><div class='muted'>Win rate</div><div class='num'>{stats['win_rate']}%</div></div>
-        <div class='card'><div class='muted'>Sinais abertos</div><div class='num'>{stats['open_signals']}</div></div>
+    html_doc = """
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>__APP_NAME__</title>
+<link rel="preconnect" href="https://s3.tradingview.com" />
+<style>
+:root{
+  --bg:#05070d; --panel:#0b1220cc; --panel2:#111a2bcc; --line:#24314e; --text:#e8f0ff; --muted:#8fa6ca;
+  --gold:#f6c453; --green:#51e39a; --red:#ff5c7c; --blue:#6aa7ff; --cyan:#4dd8ff; --shadow:0 22px 80px #000a;
+}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 20% -10%,#233b72 0,#05070d 34%),radial-gradient(circle at 95% 5%,#4e3510 0,#05070d 28%),#05070d;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh}
+body:before{content:"";position:fixed;inset:0;background:linear-gradient(transparent 0 97%,#ffffff08 98%),linear-gradient(90deg,transparent 0 97%,#ffffff06 98%);background-size:42px 42px;mask-image:linear-gradient(to bottom,#000,transparent 78%);pointer-events:none}.wrap{max-width:1520px;margin:0 auto;padding:22px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:14px}.logo{width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,#ffd66e,#9a5c00);box-shadow:0 0 50px #f6c45355;display:grid;place-items:center;color:#14100a;font-weight:1000}.title h1{margin:0;font-size:clamp(22px,2.2vw,34px);letter-spacing:-.04em}.title p{margin:4px 0 0;color:var(--muted)}.statusbar{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.pill{border:1px solid var(--line);background:#0b1220b0;border-radius:999px;padding:9px 12px;color:var(--muted);font-size:13px;backdrop-filter:blur(16px)}.pulse{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--green);box-shadow:0 0 0 0 #51e39a88;animation:pulse 1.6s infinite;margin-right:7px}@keyframes pulse{70%{box-shadow:0 0 0 10px #51e39a00}}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}.card{border:1px solid #263554;background:linear-gradient(180deg,var(--panel),#08101dcc);border-radius:24px;padding:18px;box-shadow:var(--shadow);backdrop-filter:blur(20px);position:relative;overflow:hidden}.card:after{content:"";position:absolute;inset:-1px;background:linear-gradient(135deg,#ffffff12,transparent 42%,#f6c45312);pointer-events:none;border-radius:24px}.card>*{position:relative;z-index:1}.span3{grid-column:span 3}.span4{grid-column:span 4}.span5{grid-column:span 5}.span6{grid-column:span 6}.span7{grid-column:span 7}.span8{grid-column:span 8}.span12{grid-column:span 12}.label{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:800}.big{font-size:clamp(26px,3vw,46px);font-weight:1000;letter-spacing:-.06em;margin-top:8px}.sub{color:var(--muted);font-size:13px;margin-top:8px}.green{color:var(--green)}.red{color:var(--red)}.gold{color:var(--gold)}.blue{color:var(--blue)}.row{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid #24314a;padding:10px 0}.row:last-child{border-bottom:0}.mono{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}.phase{font-size:20px;font-weight:950;margin-top:8px}.chartbox{height:330px;position:relative}.canvaswrap{height:290px}.twbox{height:520px}.feed{max-height:420px;overflow:auto;padding-right:4px}.feeditem{padding:13px;border:1px solid #22314d;border-radius:18px;background:#091120;margin-bottom:10px}.feeditem b{display:block;margin-bottom:4px}.btns{display:flex;flex-wrap:wrap;gap:10px}.btn{color:var(--text);text-decoration:none;border:1px solid #314260;background:#0c1628;border-radius:14px;padding:10px 12px;font-weight:700}.warn{border-color:#5d4420;background:#1c1305;color:#ffd989}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:10px;border-bottom:1px solid #24314a;text-align:left;font-size:13px}.table th{color:#a5b8da;text-transform:uppercase;font-size:11px;letter-spacing:.08em}.empty{display:grid;place-items:center;min-height:220px;color:var(--muted);text-align:center;border:1px dashed #2b3b59;border-radius:18px}.spark{height:6px;border-radius:999px;background:#18243a;overflow:hidden}.spark span{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--green));width:0}.kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.kpi div{padding:12px;border-radius:16px;background:#091120;border:1px solid #22314d}.footer{color:#8095b9;font-size:12px;margin:18px 0 4px;text-align:center}
+@media (max-width:1100px){.span3,.span4,.span5,.span6,.span7,.span8{grid-column:span 12}.top{display:block}.statusbar{justify-content:flex-start;margin-top:12px}.twbox{height:420px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><div class="logo">Au</div><div class="title"><h1>__APP_NAME__</h1><p>__STRATEGY__ • v__VERSION__</p></div></div>
+    <div class="statusbar">
+      <div class="pill"><span class="pulse"></span><span id="botOnline">online</span></div>
+      <div class="pill">Atualização: <span id="updatedAt" class="mono">--</span></div>
+      <div class="pill">Telegram: <span id="telegramStatus">--</span></div>
+      <div class="pill">Timezone: <span id="tz">--</span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="card span3"><div class="label">Preço XAUUSD</div><div id="price" class="big gold">--</div><div id="priceSub" class="sub">Aguardando webhook</div></section>
+    <section class="card span3"><div class="label">Fase do robô</div><div id="phase" class="phase">--</div><div id="phaseSub" class="sub">--</div></section>
+    <section class="card span3"><div class="label">Performance ao vivo</div><div class="big"><span id="wins" class="green">0</span><span class="muted"> / </span><span id="losses" class="red">0</span></div><div class="sub">Win rate: <b id="wr">0%</b> • Abertos: <b id="openCount">0</b></div></section>
+    <section class="card span3"><div class="label">Risco configurado</div><div class="big"><span id="riskPct">--</span>%</div><div class="sub">Banca: <span id="balance" class="mono">--</span> • Custo BT: <span id="cost" class="mono">--</span></div></section>
+
+    <section class="card span7">
+      <div class="label">Gráfico interno — candles recebidos pelo webhook</div>
+      <div class="canvaswrap"><canvas id="candleCanvas" style="width:100%;height:100%"></canvas></div>
+      <div class="kpi" style="margin-top:12px">
+        <div><div class="label">Último candle</div><b id="lastCandle" class="mono">--</b></div>
+        <div><div class="label">Candles carregados</div><b id="loadedCandles" class="mono">0</b></div>
       </div>
-      <div class='card'><h2>Últimos sinais</h2><table><thead><tr><th>Hora</th><th>Ativo</th><th>TF</th><th>Ação</th><th>Conf.</th><th>Qualidade</th></tr></thead><tbody>{rows}</tbody></table></div>
-      <p class='muted'>Endpoints: <code>/health</code> <code>/api/status</code> <code>/webhook/tradingview</code> <code>/telegram/test</code> <code>/webhook/debug</code> <code>/stats</code></p>
-    </div></body></html>"""
+    </section>
+
+    <section class="card span5">
+      <div class="label">ORB de hoje</div>
+      <div class="row"><span>High da faixa</span><b id="orbHigh" class="mono">--</b></div>
+      <div class="row"><span>Low da faixa</span><b id="orbLow" class="mono">--</b></div>
+      <div class="row"><span>Range</span><b id="orbRange" class="mono">--</b></div>
+      <div class="row"><span>BUY STOP estimado</span><b id="orbEntry" class="mono gold">--</b></div>
+      <div class="row"><span>Próximo passo</span><b id="nextStep" class="mono">--</b></div>
+      <div class="sub warn" style="padding:10px;border-radius:14px;margin-top:12px">O painel mostra dados recebidos do TradingView. Para tempo real, o alerta precisa estar ativo enviando candles M5 para o webhook.</div>
+    </section>
+
+    <section class="card span5">
+      <div class="label">Ordem / trade atual</div>
+      <div id="openBox" class="empty">Nenhuma ordem aberta ou pendente agora.</div>
+    </section>
+
+    <section class="card span7">
+      <div class="label">TradingView — referência visual externa</div>
+      <div id="tv_chart" class="twbox"></div>
+    </section>
+
+    <section class="card span4">
+      <div class="label">Backtest validado</div>
+      <div class="row"><span>Retorno total</span><b id="btRet" class="mono green">--</b></div>
+      <div class="row"><span>Drawdown</span><b id="btDd" class="mono red">--</b></div>
+      <div class="row"><span>PF</span><b id="btPf" class="mono">--</b></div>
+      <div class="row"><span>Trades</span><b id="btTrades" class="mono">--</b></div>
+      <div class="sub">Valores do backtest 2023–2025, já com custo estimado configurado.</div>
+    </section>
+
+    <section class="card span4">
+      <div class="label">Último webhook</div>
+      <div class="row"><span>Status</span><b id="whStatus">--</b></div>
+      <div class="row"><span>Horário</span><b id="whTime" class="mono">--</b></div>
+      <div class="row"><span>Payload</span><b id="whPayload" class="mono">--</b></div>
+      <div class="btns" style="margin-top:12px"><a class="btn" href="/webhook/debug" target="_blank">Debug</a><a class="btn" href="/api/live" target="_blank">API live</a><a class="btn" href="/stats" target="_blank">Stats</a></div>
+    </section>
+
+    <section class="card span4">
+      <div class="label">Controle operacional</div>
+      <div class="row"><span>Ativo</span><b id="symbol" class="mono">XAUUSD</b></div>
+      <div class="row"><span>Timeframe</span><b id="tf" class="mono">M5</b></div>
+      <div class="row"><span>Estratégia</span><b class="mono">GOLD_ORB_V10</b></div>
+      <div class="spark" style="margin-top:14px"><span id="freshBar"></span></div>
+      <div id="freshText" class="sub">Aguardando candle fresco.</div>
+    </section>
+
+    <section class="card span6"><div class="label">Últimos resultados</div><div id="closedTable"></div></section>
+    <section class="card span6"><div class="label">Atividade do bot em tempo real</div><div id="feed" class="feed"></div></section>
+  </div>
+  <div class="footer">Dashboard v10.1 • Dados internos via /api/live • Gráfico TradingView apenas como referência visual.</div>
+</div>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script>
+const REFRESH_MS = __REFRESH_MS__;
+const TV_SYMBOL = "__TV_SYMBOL__";
+const fmt = (v, suf='') => (v===undefined || v===null || v==='' || Number.isNaN(v)) ? '--' : `${v}${suf}`;
+function setText(id, value){ const el=document.getElementById(id); if(el) el.textContent=value; }
+function clsChange(el, n){ if(!el) return; el.classList.remove('green','red','gold'); if(n>0) el.classList.add('green'); else if(n<0) el.classList.add('red'); else el.classList.add('gold'); }
+function compactTime(t){ if(!t) return '--'; try { return new Date(t).toLocaleString('pt-BR'); } catch(e){ return String(t).slice(0,19); } }
+function renderChart(candles){
+  const canvas=document.getElementById('candleCanvas'); const wrap=canvas.parentElement; const dpr=window.devicePixelRatio||1;
+  canvas.width=wrap.clientWidth*dpr; canvas.height=wrap.clientHeight*dpr; const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+  const w=wrap.clientWidth, h=wrap.clientHeight; ctx.clearRect(0,0,w,h);
+  if(!candles || candles.length<5){ ctx.fillStyle='#8fa6ca'; ctx.font='14px Inter'; ctx.fillText('Aguardando candles do TradingView...',20,40); return; }
+  const data=candles.slice(-110); const hi=Math.max(...data.map(c=>c.high)); const lo=Math.min(...data.map(c=>c.low)); const pad=18; const cw=(w-pad*2)/data.length;
+  ctx.strokeStyle='#23314e'; ctx.lineWidth=1; for(let i=0;i<5;i++){ let y=pad+i*(h-pad*2)/4; ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(w-pad,y); ctx.stroke(); }
+  function y(v){ return pad+(hi-v)/(hi-lo||1)*(h-pad*2); }
+  data.forEach((c,i)=>{ const x=pad+i*cw+cw/2; const up=c.close>=c.open; ctx.strokeStyle=up?'#51e39a':'#ff5c7c'; ctx.fillStyle=ctx.strokeStyle; ctx.beginPath(); ctx.moveTo(x,y(c.high)); ctx.lineTo(x,y(c.low)); ctx.stroke(); const bodyY=Math.min(y(c.open),y(c.close)); const bodyH=Math.max(2,Math.abs(y(c.close)-y(c.open))); ctx.fillRect(x-cw*.28,bodyY,cw*.56,bodyH); });
+  ctx.fillStyle='#8fa6ca'; ctx.font='12px ui-monospace'; ctx.fillText(String(hi.toFixed(2)), w-76, pad+5); ctx.fillText(String(lo.toFixed(2)), w-76, h-pad);
+}
+function renderOpen(signals){
+  const box=document.getElementById('openBox'); if(!signals || !signals.length){ box.className='empty'; box.innerHTML='Nenhuma ordem aberta ou pendente agora.'; return; }
+  const s=signals[0]; box.className=''; box.innerHTML=`
+    <div class="row"><span>Status</span><b class="mono gold">${fmt(s.order_status||'ACTIVE')}</b></div>
+    <div class="row"><span>Tipo</span><b class="mono">${fmt(s.order_type||s.action)}</b></div>
+    <div class="row"><span>Entrada</span><b class="mono gold">${fmt(s.entry)}</b></div>
+    <div class="row"><span>SL</span><b class="mono red">${fmt(s.stop_loss)}</b></div>
+    <div class="row"><span>TP</span><b class="mono green">${fmt(s.take_profit)}</b></div>
+    <div class="row"><span>Risco/lote</span><b class="mono">${fmt(s.risk?.risk_pips)} pips • ${fmt(s.risk?.estimated_lot)} lote</b></div>
+    <div class="sub">${fmt(s.reason)}</div>`;
+}
+function renderClosed(rows){
+  const box=document.getElementById('closedTable'); if(!rows || !rows.length){ box.innerHTML='<div class="empty">Sem resultados fechados ainda.</div>'; return; }
+  box.innerHTML='<table class="table"><thead><tr><th>Hora</th><th>Resultado</th><th>Entrada</th><th>Preço</th></tr></thead><tbody>'+rows.slice(0,8).map(r=>`<tr><td>${fmt(r.timestamp_local||compactTime(r.timestamp_utc))}</td><td class="${r.result==='WIN'?'green':r.result==='LOSS'?'red':'gold'}"><b>${fmt(r.result)}</b></td><td class="mono">${fmt(r.entry)}</td><td class="mono">${fmt(r.hit_price)}</td></tr>`).join('')+'</tbody></table>';
+}
+function renderFeed(items){
+  const box=document.getElementById('feed'); if(!items || !items.length){ box.innerHTML='<div class="empty">Aguardando atividade.</div>'; return; }
+  box.innerHTML=items.slice(0,12).map(x=>`<div class="feeditem"><b>${fmt(x.title)}</b><span class="sub">${compactTime(x.time)} • ${fmt(x.type)} • ${fmt(x.status)}</span></div>`).join('');
+}
+function updateBacktest(bt){
+  const row=bt?.current_risk_match||{}; setText('btRet', fmt(row.ret_pct?.toFixed?row.ret_pct.toFixed(2):row.ret_pct,'%')); setText('btDd', fmt(row.dd_pct?.toFixed?row.dd_pct.toFixed(2):row.dd_pct,'%')); setText('btPf', fmt(row.pf?.toFixed?row.pf.toFixed(2):row.pf)); setText('btTrades', fmt(row.trades));
+}
+async function refresh(){
+  try{
+    const res=await fetch('/api/live?symbol=XAUUSD&timeframe=M5&candles=180',{cache:'no-store'}); const d=await res.json();
+    const m=d.market||{}, s=d.stats||{}, o=d.orb||{}, cfg=d.settings||{}, srv=d.server||{};
+    setText('updatedAt', new Date().toLocaleTimeString('pt-BR')); setText('telegramStatus', srv.telegram_enabled?'ativo':'desativado'); setText('tz', srv.timezone||'UTC');
+    setText('price', fmt(m.close)); setText('symbol', m.symbol||'XAUUSD'); setText('tf', m.timeframe||'M5');
+    const priceSub = m.available ? `${fmt(m.change)} (${fmt(m.change_pct,'%')}) • H ${fmt(m.high)} / L ${fmt(m.low)} • idade ${fmt(m.age_seconds,'s')}` : (m.reason||'Sem dados'); setText('priceSub', priceSub); clsChange(document.getElementById('price'), m.change||0);
+    setText('phase', o.phase_label||'--'); setText('phaseSub', o.phase ? o.phase : '--'); setText('nextStep', o.minutes_to_next_step===null||o.minutes_to_next_step===undefined?'--':`${o.minutes_to_next_step} min`);
+    setText('wins', s.wins||0); setText('losses', s.losses||0); setText('wr', fmt(s.win_rate,'%')); setText('openCount', s.open_signals||0);
+    setText('riskPct', cfg.risk_per_trade_pct||'--'); setText('balance', fmt(cfg.account_balance)); setText('cost', fmt(cfg.orb_round_turn_cost_points,' pts'));
+    const r=o.range||{}; setText('orbHigh', fmt(r.orb_range_high)); setText('orbLow', fmt(r.orb_range_low)); setText('orbRange', fmt(r.orb_range_width)); setText('orbEntry', fmt(r.estimated_buy_stop || o.signal?.entry));
+    setText('lastCandle', m.timestamp?.timestamp_display || '--'); setText('loadedCandles', m.candles_loaded||0);
+    setText('whStatus', d.last_webhook?.status || '--'); setText('whTime', compactTime(d.last_webhook?.timestamp_utc)); setText('whPayload', d.last_webhook?.received ? d.last_webhook.received.slice(0,55) : '--');
+    const fresh=Math.max(0, Math.min(100, m.is_fresh?100:30)); document.getElementById('freshBar').style.width=fresh+'%'; setText('freshText', m.is_fresh?'Fluxo de candles recente.':'Candle antigo ou alerta parado. Verifique o TradingView.');
+    renderChart(d.candles||[]); renderOpen(d.open_signals||[]); renderClosed(d.closed_signals||[]); renderFeed(d.activity||[]); updateBacktest(d.backtest||{});
+  }catch(e){ setText('botOnline','erro na API'); console.error(e); }
+}
+function initTradingView(){
+  try{ new TradingView.widget({"autosize":true,"symbol":TV_SYMBOL,"interval":"5","timezone":"Etc/UTC","theme":"dark","style":"1","locale":"br","hide_top_toolbar":false,"hide_legend":false,"allow_symbol_change":true,"container_id":"tv_chart"}); }catch(e){ document.getElementById('tv_chart').innerHTML='<div class="empty">TradingView indisponível no navegador.</div>'; }
+}
+window.addEventListener('resize',()=>refresh()); initTradingView(); refresh(); setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
+"""
+    html_doc = html_doc.replace("__APP_NAME__", html.escape(APP_NAME))
+    html_doc = html_doc.replace("__STRATEGY__", html.escape(STRATEGY_NAME))
+    html_doc = html_doc.replace("__VERSION__", html.escape(APP_VERSION))
+    html_doc = html_doc.replace("__REFRESH_MS__", str(DASHBOARD_REFRESH_MS))
+    html_doc = html_doc.replace("__TV_SYMBOL__", html.escape(TRADINGVIEW_DASHBOARD_SYMBOL))
     return HTMLResponse(html_doc)
 
 

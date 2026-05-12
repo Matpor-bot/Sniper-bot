@@ -1,6 +1,6 @@
-# Railway Gold ORB Scalper v10.0
+# Railway Gold ORB Scalper v10.1 — Pro Live Dashboard
 
-Versão validada para **XAUUSD M5** usando histórico **Dukascopy M1 BID 2023-2025 convertido para M5**.
+Versão validada para **XAUUSD M5**, agora com dashboard profissional em tempo real usando histórico **Dukascopy M1 BID 2023-2025 convertido para M5**.
 
 ## Estratégia selecionada
 
@@ -30,6 +30,29 @@ Risco de 3% por trade:
 
 Risco recomendado para demo: `3.0%`.
 Risco extremo: `5.0%`, com drawdown histórico acima de 56%.
+
+
+## Dashboard profissional em tempo real
+
+A página inicial `/` agora mostra um painel visual completo:
+
+- preço e último candle recebido do XAUUSD;
+- fase atual do robô: aguardando faixa, formando ORB, janela aberta, ordem pendente ou trade ativo;
+- high/low/range da abertura de 13:30-13:45 UTC;
+- entrada BUY STOP estimada, SL, TP e lote quando houver ordem;
+- gráfico interno com os candles recebidos pelo webhook;
+- gráfico TradingView integrado como referência visual;
+- últimos webhooks, sinais, resultados e estatísticas ao vivo;
+- endpoints JSON: `/api/live`, `/api/candles/XAUUSD/M5`, `/api/backtest-summary`.
+
+Importante: o painel interno só fica realmente em tempo real quando o alerta do TradingView está ativo enviando candles M5 para `/webhook/tradingview`. O gráfico TradingView é apenas referência visual externa; a lógica do bot usa os candles recebidos pelo webhook.
+
+Variáveis opcionais do dashboard:
+
+```env
+DASHBOARD_REFRESH_MS=2000
+TRADINGVIEW_DASHBOARD_SYMBOL=OANDA:XAUUSD
+```
 
 ## Como usar no TradingView
 
