@@ -1,0 +1,14 @@
+//@version=5
+indicator("Portfolio ORB Multi v12.1 - Webhook", overlay=true, max_labels_count=500)
+
+// Use o MESMO Pine nos 3 gráficos M5:
+// 1) XAUUSD / GOLD
+// 2) NAS100 / US100 / USATECH
+// 3) GER40 / DE40 / DAX
+// Crie um alerta por gráfico em: Any alert() function call.
+
+sym = syminfo.ticker
+payload = '{"symbol":"' + sym + '","timeframe":"' + timeframe.period + '","candles":[{"time":"' + str.tostring(time) + '","open":' + str.tostring(open) + ',"high":' + str.tostring(high) + ',"low":' + str.tostring(low) + ',"close":' + str.tostring(close) + ',"volume":' + str.tostring(volume) + '}],"flags":{"source":"tradingview","strategy":"PORTFOLIO_ORB_MULTI_V12_1"}}'
+
+alert(payload, alert.freq_once_per_bar_close)
+plot(close, title="Close")

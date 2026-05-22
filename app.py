@@ -18,12 +18,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-APP_NAME = "Railway Gold ORB Scalper"
-APP_VERSION = "10.1.0"
+APP_NAME = "Railway Portfolio ORB Scalper - XAUUSD + NAS100 + GER40"
+APP_VERSION = "v12.1-portfolio-xau-nas-ger"
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 STATE_LOCK = threading.Lock()
 DASHBOARD_REFRESH_MS = int(os.getenv("DASHBOARD_REFRESH_MS", "2000"))
-TRADINGVIEW_DASHBOARD_SYMBOL = os.getenv("TRADINGVIEW_DASHBOARD_SYMBOL", "OANDA:XAUUSD")
+TRADINGVIEW_DASHBOARD_SYMBOL = os.getenv("TRADINGVIEW_DASHBOARD_SYMBOL", "PEPPERSTONE:XAUUSD")
 
 # =========================
 # Configuracao por variaveis
@@ -44,7 +44,7 @@ BOT_STARTUP_ALERT = os.getenv("BOT_STARTUP_ALERT", "true").lower() == "true"
 SEND_HOLD_SIGNALS = os.getenv("SEND_HOLD_SIGNALS", "false").lower() == "true"
 
 # Estrategia
-STRATEGY_NAME = os.getenv("STRATEGY_NAME", "Gold ORB Scalper v10 - XAUUSD Opening Range Breakout")
+STRATEGY_NAME = os.getenv("STRATEGY_NAME", "Portfolio ORB Multi - XAUUSD v10.3 + NAS100 v11 + GER40 v12")
 EMA_FAST = int(os.getenv("EMA_FAST", "9"))
 EMA_SLOW = int(os.getenv("EMA_SLOW", "21"))
 EMA_TREND = int(os.getenv("EMA_TREND", "75"))
@@ -89,25 +89,40 @@ MAX_BARS_IN_SIGNAL = int(os.getenv("MAX_BARS_IN_SIGNAL", "22"))
 TIMEOUT_CLOSE_AS_RESULT = os.getenv("TIMEOUT_CLOSE_AS_RESULT", "true").lower() == "true"
 
 # v10: Gold ORB Scalper — estratégia validada em XAUUSD Dukascopy 2023-2025.
-STRATEGY_MODE = os.getenv("STRATEGY_MODE", "GOLD_ORB_V10").upper()
-ORB_SYMBOL_ALLOWLIST = [s.strip().upper().replace("/", "") for s in os.getenv("ORB_SYMBOL_ALLOWLIST", "XAUUSD,GOLD").split(",") if s.strip()]
+STRATEGY_MODE = os.getenv("STRATEGY_MODE", "PORTFOLIO_ORB_MULTI").upper()
+ORB_SYMBOL_ALLOWLIST = [s.strip().upper().replace("/", "") for s in os.getenv("ORB_SYMBOL_ALLOWLIST", "GER40,DAX,DE40,GERMANY40,DEUIDXEUR").split(",") if s.strip()]
 ORB_TIMEFRAME_MINUTES = int(os.getenv("ORB_TIMEFRAME_MINUTES", "5"))
-ORB_START_MINUTE_UTC = int(os.getenv("ORB_START_MINUTE_UTC", "810"))  # 13:30 UTC
-ORB_RANGE_MINUTES = int(os.getenv("ORB_RANGE_MINUTES", "15"))
+ORB_START_MINUTE_UTC = int(os.getenv("ORB_START_MINUTE_UTC", "480"))  # fallback UTC; v12 usa Europe/Berlin local por padrao
+ORB_RANGE_MINUTES = int(os.getenv("ORB_RANGE_MINUTES", "30"))
 ORB_TRADE_WINDOW_MINUTES = int(os.getenv("ORB_TRADE_WINDOW_MINUTES", "120"))
-ORB_DIRECTION = os.getenv("ORB_DIRECTION", "BUY_STOP").upper()
-ORB_BUFFER_MULT = float(os.getenv("ORB_BUFFER_MULT", "0.05"))
-ORB_STOP_RANGE_MULT = float(os.getenv("ORB_STOP_RANGE_MULT", "0.75"))
-ORB_TAKE_R = float(os.getenv("ORB_TAKE_R", "2.0"))
-ORB_MIN_RANGE_ATR = float(os.getenv("ORB_MIN_RANGE_ATR", "0.35"))
-ORB_MAX_RANGE_ATR = float(os.getenv("ORB_MAX_RANGE_ATR", "3.5"))
+ORB_DIRECTION = os.getenv("ORB_DIRECTION", "AUTO").upper()
+ORB_BUFFER_MULT = float(os.getenv("ORB_BUFFER_MULT", "0.10"))
+ORB_STOP_RANGE_MULT = float(os.getenv("ORB_STOP_RANGE_MULT", "0.90"))
+ORB_TAKE_R = float(os.getenv("ORB_TAKE_R", "2.5"))
+ORB_MIN_RANGE_ATR = float(os.getenv("ORB_MIN_RANGE_ATR", "0.25"))
+ORB_MAX_RANGE_ATR = float(os.getenv("ORB_MAX_RANGE_ATR", "4.0"))
 ORB_MAX_RANGE_PCT = float(os.getenv("ORB_MAX_RANGE_PCT", "0.025"))
-ORB_MIN_STOP_POINTS = float(os.getenv("ORB_MIN_STOP_POINTS", "1.2"))
-ORB_MAX_STOP_POINTS = float(os.getenv("ORB_MAX_STOP_POINTS", "10.0"))
-ORB_ROUND_TURN_COST_POINTS = float(os.getenv("ORB_ROUND_TURN_COST_POINTS", "0.35"))
+ORB_MIN_STOP_POINTS = float(os.getenv("ORB_MIN_STOP_POINTS", "8.0"))
+ORB_MAX_STOP_POINTS = float(os.getenv("ORB_MAX_STOP_POINTS", "120.0"))
+ORB_ROUND_TURN_COST_POINTS = float(os.getenv("ORB_ROUND_TURN_COST_POINTS", "1.5"))
 ORB_ONE_TRADE_PER_DAY = os.getenv("ORB_ONE_TRADE_PER_DAY", "true").lower() == "true"
-ORB_SEND_PENDING_AT_RANGE_CLOSE = os.getenv("ORB_SEND_PENDING_AT_RANGE_CLOSE", "true").lower() == "true"
+ORB_SEND_PENDING_AT_RANGE_CLOSE = os.getenv("ORB_SEND_PENDING_AT_RANGE_CLOSE", "false").lower() == "true"
 ORB_PENDING_EXPIRE_BARS = int(os.getenv("ORB_PENDING_EXPIRE_BARS", str(max(1, ORB_TRADE_WINDOW_MINUTES // max(1, ORB_TIMEFRAME_MINUTES)))))
+ORB_TREND_FILTER = os.getenv("ORB_TREND_FILTER", "with").lower()  # none | with
+ORB_EMA_FAST = int(os.getenv("ORB_EMA_FAST", "50"))
+ORB_EMA_SLOW = int(os.getenv("ORB_EMA_SLOW", "200"))
+ORB_VWAP_PERIOD = int(os.getenv("ORB_VWAP_PERIOD", "40"))
+ORB_SPREAD_GUARD_ENABLED = os.getenv("ORB_SPREAD_GUARD_ENABLED", "true").lower() == "true"
+ORB_MAX_REAL_SPREAD_POINTS = float(os.getenv("ORB_MAX_REAL_SPREAD_POINTS", "2.0"))
+ORB_REJECT_NEUTRAL_TREND = os.getenv("ORB_REJECT_NEUTRAL_TREND", "true").lower() == "true"
+ORB_BLOCKED_WEEKDAYS_UTC = os.getenv("ORB_BLOCKED_WEEKDAYS_UTC", "0,4")  # Python weekday local: Mon=0 ... Fri=4; v12 bloqueia segunda e sexta
+ORB_USE_LOCAL_TIMEZONE = os.getenv("ORB_USE_LOCAL_TIMEZONE", "true").lower() == "true"
+ORB_SESSION_TIMEZONE = os.getenv("ORB_SESSION_TIMEZONE", "Europe/Berlin")
+ORB_START_MINUTE_LOCAL = int(os.getenv("ORB_START_MINUTE_LOCAL", "540"))  # 09:00 Europe/Berlin, com DST correto
+ORB_ENTRY_ENGINE = os.getenv("ORB_ENTRY_ENGINE", "close_break").lower()  # close_break | stop
+ORB_MOMENTUM_FILTER_ENABLED = os.getenv("ORB_MOMENTUM_FILTER_ENABLED", "true").lower() == "true"
+ORB_POS_BUY_MIN = float(os.getenv("ORB_POS_BUY_MIN", "0.60"))
+ORB_POS_SELL_MAX = float(os.getenv("ORB_POS_SELL_MAX", "0.40"))
 
 # Risco / alvo
 ATR_STOP_MULT = float(os.getenv("ATR_STOP_MULT", "3.5"))
@@ -118,7 +133,7 @@ MIN_STOP_XAU_PIPS = float(os.getenv("MIN_STOP_XAU_PIPS", "70"))
 MAX_STOP_XAU_PIPS = float(os.getenv("MAX_STOP_XAU_PIPS", "220"))
 ENTRY_ZONE_ATR_MULT = float(os.getenv("ENTRY_ZONE_ATR_MULT", "0.18"))
 ACCOUNT_BALANCE = float(os.getenv("ACCOUNT_BALANCE", "1000"))
-RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", "1.0"))
+RISK_PER_TRADE_PCT = float(os.getenv("RISK_PER_TRADE_PCT", "3.0"))
 PIP_VALUE_PER_LOT_USD = float(os.getenv("PIP_VALUE_PER_LOT_USD", "10"))
 MIN_LOT = float(os.getenv("MIN_LOT", "0.01"))
 MAX_LOT = float(os.getenv("MAX_LOT", "5"))
@@ -129,7 +144,7 @@ SESSION_FILTER_ENABLED = os.getenv("SESSION_FILTER_ENABLED", "true").lower() == 
 # Padrao em UTC: Londres inicial + overlap Londres/NY. Ajuste no Railway se operar outro ativo/horario.
 SESSION_WINDOWS_UTC = os.getenv("SESSION_WINDOWS_UTC", "06:00-18:00")
 BLOCK_WEEKEND = os.getenv("BLOCK_WEEKEND", "true").lower() == "true"
-SYMBOL_ALLOWLIST = [s.strip().upper().replace("/", "") for s in os.getenv("SYMBOL_ALLOWLIST", "USDJPY").split(",") if s.strip()]
+SYMBOL_ALLOWLIST = [s.strip().upper().replace("/", "") for s in os.getenv("SYMBOL_ALLOWLIST", "GER40,DAX,DE40,GERMANY40,DEUIDXEUR").split(",") if s.strip()]
 SPREAD_UNKNOWN_POLICY = os.getenv("SPREAD_UNKNOWN_POLICY", "ignore").lower()  # ignore | block
 MAX_SPREAD_PIPS = float(os.getenv("MAX_SPREAD_PIPS", "1.6"))
 MAX_SPREAD_XAU_PIPS = float(os.getenv("MAX_SPREAD_XAU_PIPS", "35"))
@@ -1008,7 +1023,8 @@ def bars_elapsed_for_signal(state: dict, symbol: str, timeframe: str, signal: di
 
 
 def resolve_signal_timeout(signal: dict, candle: Candle, bars_elapsed: int) -> Optional[dict]:
-    if MAX_BARS_IN_SIGNAL <= 0 or bars_elapsed < MAX_BARS_IN_SIGNAL:
+    max_bars_limit = int(signal.get("max_bars_in_signal", MAX_BARS_IN_SIGNAL) or MAX_BARS_IN_SIGNAL)
+    if max_bars_limit <= 0 or bars_elapsed < max_bars_limit:
         return None
     action = signal.get("action")
     entry = safe_float(signal.get("entry"))
@@ -1025,6 +1041,7 @@ def resolve_signal_timeout(signal: dict, candle: Candle, bars_elapsed: int) -> O
         "result": result,
         "hit_price": round_price(close, signal.get("symbol", ""), close),
         "reason": f"Sinal expirou apos {bars_elapsed} candles sem TP/SL. Fechamento {'favoravel' if is_win else 'desfavoravel'}.",
+        "max_bars_limit": max_bars_limit,
         "signal": signal,
         "symbol": signal.get("symbol"),
         "timeframe": signal.get("timeframe"),
@@ -1221,10 +1238,36 @@ def _utc_minute(dt: datetime) -> int:
     return dt.astimezone(timezone.utc).hour * 60 + dt.astimezone(timezone.utc).minute
 
 
+def _orb_tz() -> ZoneInfo:
+    try:
+        return ZoneInfo(ORB_SESSION_TIMEZONE)
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def _orb_minute(dt: datetime) -> int:
+    zdt = dt.astimezone(_orb_tz()) if ORB_USE_LOCAL_TIMEZONE else dt.astimezone(timezone.utc)
+    return zdt.hour * 60 + zdt.minute
+
+
+def _orb_market_date(dt: datetime) -> str:
+    zdt = dt.astimezone(_orb_tz()) if ORB_USE_LOCAL_TIMEZONE else dt.astimezone(timezone.utc)
+    return zdt.date().isoformat()
+
+
+def _orb_weekday(dt: datetime) -> int:
+    zdt = dt.astimezone(_orb_tz()) if ORB_USE_LOCAL_TIMEZONE else dt.astimezone(timezone.utc)
+    return zdt.weekday()
+
+
+def _orb_start_minute() -> int:
+    return ORB_START_MINUTE_LOCAL if ORB_USE_LOCAL_TIMEZONE else ORB_START_MINUTE_UTC
+
+
 def _orb_today_already_has_signal(symbol: str, dt_utc: datetime) -> bool:
     if not ORB_ONE_TRADE_PER_DAY:
         return False
-    target_date = dt_utc.astimezone(timezone.utc).date().isoformat()
+    target_date = _orb_market_date(dt_utc)
     state = load_state()
     candidates: list[dict] = []
     candidates.extend(state.get("_signal_history", []))
@@ -1235,7 +1278,7 @@ def _orb_today_already_has_signal(symbol: str, dt_utc: datetime) -> bool:
     for item in candidates[-800:]:
         if norm_symbol(item.get("symbol", "")) != symbol:
             continue
-        if "Gold ORB" not in str(item.get("strategy", "")) and str(item.get("strategy_mode", "")).upper() != "GOLD_ORB_V10":
+        if "ORB" not in str(item.get("strategy", "")).upper() and not str(item.get("strategy_mode", "")).upper().startswith("GOLD_ORB"):
             continue
         ts = item.get("timestamp_utc") or item.get("activated_timestamp_utc")
         if not ts:
@@ -1244,7 +1287,7 @@ def _orb_today_already_has_signal(symbol: str, dt_utc: datetime) -> bool:
         if not ts:
             continue
         try:
-            d = datetime.fromisoformat(str(ts).replace("Z", "+00:00")).astimezone(timezone.utc).date().isoformat()
+            d = _orb_market_date(datetime.fromisoformat(str(ts).replace("Z", "+00:00")))
             if d == target_date:
                 return True
         except Exception:
@@ -1253,16 +1296,16 @@ def _orb_today_already_has_signal(symbol: str, dt_utc: datetime) -> bool:
 
 
 def generate_gold_orb_v10(symbol: str, timeframe: str, candles: List[Candle], payload_flags: Optional[dict] = None) -> dict:
-    """Estratégia validada: XAUUSD M5 Opening Range Breakout.
+    """GER40 DAX ORB v12 Validated.
 
-    Backtest Dukascopy 2023-2025:
-    - Ativo: XAUUSD BID M1 convertido para M5
-    - OR: 13:30-13:45 UTC
-    - Entrada: BUY STOP no topo da OR + 5% da amplitude
-    - SL: 0,75x amplitude da OR
-    - TP: 2R
-    - Janela de ativação: 120 minutos
-    - Custo estimado: 0,35 ponto round-turn
+    Backtest Dukascopy GER40/DAX BID M1 -> M5, 2023-2025:
+    - OR: 09:00-09:30 Europe/Berlin
+    - Direcao: AUTO_TREND, seguindo EMA50/EMA200 + VWAP40
+    - Entrada: BUY_STOP acima da OR ou SELL_STOP abaixo da OR
+    - SL: 0,90x range da OR
+    - TP: 2,5R
+    - Janela: 120 minutos
+    - Custo estimado: 1,5 ponto round-turn
     """
     symbol = norm_symbol(symbol)
     timeframe = str(timeframe or "5").upper()
@@ -1272,59 +1315,82 @@ def generate_gold_orb_v10(symbol: str, timeframe: str, candles: List[Candle], pa
     last = candles[-1]
     last_dt = parse_timestamp(last.time).astimezone(timezone.utc)
     if symbol not in ORB_SYMBOL_ALLOWLIST and not (symbol.startswith("XAU") and "XAUUSD" in ORB_SYMBOL_ALLOWLIST):
-        return build_hold(symbol, timeframe, last, f"ORB v10 bloqueado: ativo permitido {ORB_SYMBOL_ALLOWLIST}", len(candles))
+        return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 bloqueado: ativo permitido {ORB_SYMBOL_ALLOWLIST}", len(candles))
     if timeframe_to_minutes(timeframe) != ORB_TIMEFRAME_MINUTES:
-        return build_hold(symbol, timeframe, last, f"ORB v10 requer gráfico M{ORB_TIMEFRAME_MINUTES}; recebido {timeframe}", len(candles))
-    if BLOCK_WEEKEND and last_dt.weekday() >= 5:
-        return build_hold(symbol, timeframe, last, "ORB v10 bloqueado no fim de semana", len(candles))
-    if _orb_today_already_has_signal(symbol, last_dt):
-        return build_hold(symbol, timeframe, last, "ORB v10: já existe trade/setup deste ativo hoje", len(candles))
+        return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 requer gráfico M{ORB_TIMEFRAME_MINUTES}; recebido {timeframe}", len(candles))
+    if BLOCK_WEEKEND and _orb_weekday(last_dt) >= 5:
+        return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 bloqueado no fim de semana", len(candles))
 
-    # Histórico do dia UTC atual
-    parsed: list[tuple[datetime, Candle]] = []
+    blocked_weekdays = set()
+    for item in str(ORB_BLOCKED_WEEKDAYS_UTC or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            blocked_weekdays.add(int(item))
+        except ValueError:
+            pass
+    if _orb_weekday(last_dt) in blocked_weekdays:
+        return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 bloqueado: weekday local {_orb_weekday(last_dt)} fora do filtro validado", len(candles))
+
+    blackout, blackout_reason = in_news_blackout(last_dt)
+    high_impact_flag = bool(payload_flags and (payload_flags.get("news") or str(payload_flags.get("impact", "")).upper() in {"HIGH", "RED", "ALTO"}))
+    if blackout:
+        return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 bloqueado por notícia: {blackout_reason}", len(candles))
+    if BLOCK_HIGH_IMPACT_FLAG and high_impact_flag:
+        return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 bloqueado: payload marcou notícia de alto impacto", len(candles))
+
+    if ORB_SPREAD_GUARD_ENABLED and last.bid is not None and last.ask is not None:
+        real_spread_points = max(0.0, safe_float(last.ask) - safe_float(last.bid))
+        if real_spread_points > ORB_MAX_REAL_SPREAD_POINTS:
+            return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 bloqueado: spread real {real_spread_points:.2f} > limite {ORB_MAX_REAL_SPREAD_POINTS:.2f}", len(candles))
+
+    if _orb_today_already_has_signal(symbol, last_dt):
+        return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12: já existe trade/setup deste ativo hoje", len(candles))
+
+    parsed_all: list[tuple[datetime, Candle]] = []
+    parsed_day: list[tuple[datetime, Candle]] = []
     for c in candles:
         dt = parse_timestamp(c.time).astimezone(timezone.utc)
-        if dt.date() == last_dt.date():
-            parsed.append((dt, c))
-    parsed.sort(key=lambda x: x[0])
-    if len(parsed) < max(20, ATR_PERIOD + 5):
-        return build_hold(symbol, timeframe, last, f"ORB v10 aguardando historico intraday {len(parsed)}/{max(20, ATR_PERIOD + 5)}", len(candles))
+        parsed_all.append((dt, c))
+        if _orb_market_date(dt) == _orb_market_date(last_dt):
+            parsed_day.append((dt, c))
+    parsed_all.sort(key=lambda x: x[0])
+    parsed_day.sort(key=lambda x: x[0])
+    if len(parsed_day) < max(20, ATR_PERIOD + 5):
+        return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 aguardando histórico intraday {len(parsed_day)}/{max(20, ATR_PERIOD + 5)}", len(candles))
 
-    # A OR usa candles com abertura em [13:30, 13:45) UTC por padrão.
-    range_start = ORB_START_MINUTE_UTC
-    range_end = ORB_START_MINUTE_UTC + ORB_RANGE_MINUTES
+    range_start = _orb_start_minute()
+    range_end = range_start + ORB_RANGE_MINUTES
     trade_end = range_end + ORB_TRADE_WINDOW_MINUTES
-    current_min = _utc_minute(last_dt)
+    current_min = _orb_minute(last_dt)
 
-    range_items = [(dt, c) for dt, c in parsed if range_start <= _utc_minute(dt) < range_end]
+    range_items = [(dt, c) for dt, c in parsed_day if range_start <= _orb_minute(dt) < range_end]
     if len(range_items) < max(2, ORB_RANGE_MINUTES // ORB_TIMEFRAME_MINUTES):
-        return build_hold(symbol, timeframe, last, "ORB v10 aguardando fechamento da faixa de abertura", len(candles))
-
-    # Só envia o setup logo depois da faixa fechar. O trade em si fica como ordem pendente.
-    # Se o alerta atrasar, ainda permite até a janela de ativação, mas não repete depois do setup diário.
+        return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 aguardando fechamento da faixa de abertura", len(candles))
     if current_min < range_end:
-        return build_hold(symbol, timeframe, last, "ORB v10 faixa de abertura ainda em formação", len(candles))
+        return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 faixa de abertura ainda em formação", len(candles))
     if current_min >= trade_end:
-        return build_hold(symbol, timeframe, last, "ORB v10 janela operacional encerrada", len(candles))
+        return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 janela operacional encerrada", len(candles))
 
-    all_items = [(dt, c) for dt, c in parsed if _utc_minute(dt) <= current_min]
-    highs = [safe_float(c.high) for _, c in all_items]
-    lows = [safe_float(c.low) for _, c in all_items]
-    closes = [safe_float(c.close) for _, c in all_items]
-    atr_series = atr_values(highs, lows, closes, ATR_PERIOD)
-    # ATR no fim da OR: índice do último candle da faixa dentro de all_items.
+    all_items_day = [(dt, c) for dt, c in parsed_day if _orb_minute(dt) <= current_min]
+    highs_day = [safe_float(c.high) for _, c in all_items_day]
+    lows_day = [safe_float(c.low) for _, c in all_items_day]
+    closes_day = [safe_float(c.close) for _, c in all_items_day]
+    atr_series = atr_values(highs_day, lows_day, closes_day, ATR_PERIOD)
     range_end_dt = range_items[-1][0]
-    end_idx = max(0, [dt for dt, _ in all_items].index(range_end_dt))
+    day_dts = [dt for dt, _ in all_items_day]
+    end_idx = max(0, day_dts.index(range_end_dt)) if range_end_dt in day_dts else len(day_dts) - 1
     atr_val = float(atr_series[end_idx] or 0.0)
     if atr_val <= 0:
-        return build_hold(symbol, timeframe, last, "ORB v10 aguardando ATR valido", len(candles))
+        return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 aguardando ATR válido", len(candles))
 
     range_high = max(safe_float(c.high) for _, c in range_items)
     range_low = min(safe_float(c.low) for _, c in range_items)
     range_width = max(0.0, range_high - range_low)
     ref_close = safe_float(range_items[-1][1].close, safe_float(last.close))
     if range_width <= 0 or ref_close <= 0:
-        return build_hold(symbol, timeframe, last, "ORB v10 faixa invalida", len(candles))
+        return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 faixa inválida", len(candles))
 
     range_atr = range_width / atr_val
     range_pct = range_width / ref_close
@@ -1334,54 +1400,129 @@ def generate_gold_orb_v10(symbol: str, timeframe: str, candles: List[Candle], pa
         "orb_range_width": round_price(range_width, symbol, ref_close),
         "orb_range_atr": round(range_atr, 3),
         "orb_range_pct": round(range_pct * 100, 4),
-        "orb_start_utc": f"{ORB_START_MINUTE_UTC // 60:02d}:{ORB_START_MINUTE_UTC % 60:02d}",
+        "orb_start_local": f"{range_start // 60:02d}:{range_start % 60:02d}",
+        "orb_session_timezone": ORB_SESSION_TIMEZONE,
         "orb_range_minutes": ORB_RANGE_MINUTES,
         "orb_trade_window_minutes": ORB_TRADE_WINDOW_MINUTES,
         "atr": round_price(atr_val, symbol, ref_close),
-        "strategy_mode": "GOLD_ORB_V10",
+        "strategy_mode": STRATEGY_MODE,
     }
+    orb_position = (ref_close - range_low) / range_width if range_width > 0 else 0.5
+    metrics["orb_position"] = round(orb_position, 3)
+    metrics["entry_engine"] = ORB_ENTRY_ENGINE
     if not (ORB_MIN_RANGE_ATR <= range_atr <= ORB_MAX_RANGE_ATR):
-        return build_hold(symbol, timeframe, last, f"ORB v10 bloqueou: range/ATR {range_atr:.2f} fora do filtro", len(candles), metrics)
+        return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 bloqueou: range/ATR {range_atr:.2f} fora do filtro", len(candles), metrics)
     if range_pct > ORB_MAX_RANGE_PCT:
-        return build_hold(symbol, timeframe, last, f"ORB v10 bloqueou: range_pct {range_pct:.4%} alto demais", len(candles), metrics)
+        return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 bloqueou: range_pct {range_pct:.4%} alto demais", len(candles), metrics)
 
-    pip = pip_size(symbol, ref_close)
+    # Tendência calculada no histórico completo cacheado, não só no dia atual.
+    history_items = [(dt, c) for dt, c in parsed_all if dt <= range_end_dt]
+    hist_highs = [safe_float(c.high) for _, c in history_items]
+    hist_lows = [safe_float(c.low) for _, c in history_items]
+    hist_closes = [safe_float(c.close) for _, c in history_items]
+    hist_volumes = [max(0.0, safe_float(c.volume, 0.0)) for _, c in history_items]
+    ema_fast_series = ema_values(hist_closes, ORB_EMA_FAST)
+    ema_slow_series = ema_values(hist_closes, ORB_EMA_SLOW)
+    vwap_series = rolling_vwap(hist_highs, hist_lows, hist_closes, hist_volumes, ORB_VWAP_PERIOD)
+    ema_fast = float(ema_fast_series[-1] or ref_close)
+    ema_slow = float(ema_slow_series[-1] or ref_close)
+    vwap = float(vwap_series[-1] or ref_close)
+    trend_up = ema_fast > ema_slow and ref_close > vwap
+    trend_down = ema_fast < ema_slow and ref_close < vwap
+    metrics.update({
+        "orb_trend_filter": ORB_TREND_FILTER,
+        "ema_fast": round_price(ema_fast, symbol, ref_close),
+        "ema_slow": round_price(ema_slow, symbol, ref_close),
+        "vwap": round_price(vwap, symbol, ref_close),
+        "trend_up": trend_up,
+        "trend_down": trend_down,
+        "trend_bias": "BUY" if trend_up else ("SELL" if trend_down else "NEUTRO"),
+    })
+
+    requested = ORB_DIRECTION.upper()
+    if requested in {"BUY", "BUY_STOP", "LONG"}:
+        desired_action = "BUY"
+    elif requested in {"SELL", "SELL_STOP", "SHORT"}:
+        desired_action = "SELL"
+    else:
+        if trend_up:
+            desired_action = "BUY"
+        elif trend_down:
+            desired_action = "SELL"
+        elif ORB_REJECT_NEUTRAL_TREND:
+            return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 bloqueou: tendência neutra no filtro EMA/VWAP", len(candles), metrics)
+        else:
+            desired_action = "BUY"
+
+    if ORB_TREND_FILTER == "with":
+        if desired_action == "BUY" and not trend_up:
+            return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 bloqueou BUY: tendência EMA/VWAP não está compradora", len(candles), metrics)
+        if desired_action == "SELL" and not trend_down:
+            return build_hold(symbol, timeframe, last, "GER40 DAX ORB v12 bloqueou SELL: tendência EMA/VWAP não está vendedora", len(candles), metrics)
+
+    if ORB_MOMENTUM_FILTER_ENABLED:
+        if desired_action == "BUY" and orb_position < ORB_POS_BUY_MIN:
+            return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 bloqueou BUY: posição ORB {orb_position:.2f} < {ORB_POS_BUY_MIN:.2f}", len(candles), metrics)
+        if desired_action == "SELL" and orb_position > ORB_POS_SELL_MAX:
+            return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 bloqueou SELL: posição ORB {orb_position:.2f} > {ORB_POS_SELL_MAX:.2f}", len(candles), metrics)
+
     buffer_points = range_width * ORB_BUFFER_MULT
     stop_distance = min(max(range_width * ORB_STOP_RANGE_MULT, ORB_MIN_STOP_POINTS, ORB_ROUND_TURN_COST_POINTS * 2.5), ORB_MAX_STOP_POINTS)
+    buy_trigger = range_high + buffer_points + ORB_ROUND_TURN_COST_POINTS / 2.0
+    sell_trigger = range_low - buffer_points - ORB_ROUND_TURN_COST_POINTS / 2.0
+    last_close = safe_float(last.close, ref_close)
+    if ORB_ENTRY_ENGINE == "close_break":
+        if desired_action == "BUY" and last_close < buy_trigger:
+            return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 aguardando fechamento acima de {buy_trigger:.2f}", len(candles), metrics)
+        if desired_action == "SELL" and last_close > sell_trigger:
+            return build_hold(symbol, timeframe, last, f"GER40 DAX ORB v12 aguardando fechamento abaixo de {sell_trigger:.2f}", len(candles), metrics)
 
-    # Estratégia validada é long-only no XAUUSD.
-    action = "BUY"
-    entry = range_high + buffer_points + ORB_ROUND_TURN_COST_POINTS / 2.0
-    sl = entry - stop_distance
-    tp = entry + stop_distance * ORB_TAKE_R
-    zone_low = entry - atr_val * ENTRY_ZONE_ATR_MULT
-    zone_high = entry + atr_val * ENTRY_ZONE_ATR_MULT
+    if desired_action == "BUY":
+        action = "BUY"
+        order_type = "BUY" if ORB_ENTRY_ENGINE == "close_break" else "BUY_STOP"
+        entry = last_close if ORB_ENTRY_ENGINE == "close_break" else buy_trigger
+        sl = entry - stop_distance
+        tp = entry + stop_distance * ORB_TAKE_R
+        zone_low = entry - atr_val * ENTRY_ZONE_ATR_MULT
+        zone_high = entry + atr_val * ENTRY_ZONE_ATR_MULT
+        direction_msg = "BUY STOP = topo + buffer + custo estimado"
+        buy_score, sell_score = 10, 0
+    else:
+        action = "SELL"
+        order_type = "SELL" if ORB_ENTRY_ENGINE == "close_break" else "SELL_STOP"
+        entry = last_close if ORB_ENTRY_ENGINE == "close_break" else sell_trigger
+        sl = entry + stop_distance
+        tp = entry - stop_distance * ORB_TAKE_R
+        zone_low = entry - atr_val * ENTRY_ZONE_ATR_MULT
+        zone_high = entry + atr_val * ENTRY_ZONE_ATR_MULT
+        direction_msg = "SELL STOP = fundo - buffer - custo estimado"
+        buy_score, sell_score = 0, 10
+
     risk = risk_block(entry, sl, tp, symbol)
     rr = round(risk["reward_pips"] / risk["risk_pips"], 2) if risk.get("risk_pips") else ORB_TAKE_R
-
-    # O setup deve ser enviado uma vez no fechamento da OR. Depois fica pendente até romper.
-    order_status = "PENDING" if ORB_SEND_PENDING_AT_RANGE_CLOSE else "ACTIVE"
-    reason = "Gold ORB v10: BUY STOP no rompimento da faixa de abertura 13:30-13:45 UTC"
-    confidence = 78
-    quality = "Validada" if range_atr <= 2.2 else "Agressiva"
+    order_status = "ACTIVE" if ORB_ENTRY_ENGINE == "close_break" else ("PENDING" if ORB_SEND_PENDING_AT_RANGE_CLOSE else "ACTIVE")
+    reason = f"GER40 DAX ORB v12: {order_type} seguindo tendência EMA/VWAP"
+    confidence = 82 if range_atr <= 2.2 else 74
+    quality = "Qualidade" if range_atr <= 2.2 else "Agressiva"
     signal = {
         **timestamp_fields(last.time),
         "strategy": STRATEGY_NAME,
-        "strategy_mode": "GOLD_ORB_V10",
+        "strategy_mode": STRATEGY_MODE,
         "version": APP_VERSION,
         "symbol": symbol,
         "timeframe": timeframe,
         "action": action,
-        "order_type": "BUY_STOP",
+        "order_type": order_type,
         "order_status": order_status,
         "pending_expire_bars": ORB_PENDING_EXPIRE_BARS,
         "reason": reason,
         "reasons": [
             f"ORB high={round_price(range_high, symbol, ref_close)} low={round_price(range_low, symbol, ref_close)}",
-            f"Entrada BUY STOP = topo + {ORB_BUFFER_MULT:.2f}x range + custo estimado",
+            f"Entrada {direction_msg}",
             f"SL = {ORB_STOP_RANGE_MULT:.2f}x range | TP = {ORB_TAKE_R:.2f}R",
+            f"Filtro tendência: EMA{ORB_EMA_FAST}={round_price(ema_fast, symbol, ref_close)} EMA{ORB_EMA_SLOW}={round_price(ema_slow, symbol, ref_close)} VWAP{ORB_VWAP_PERIOD}={round_price(vwap, symbol, ref_close)}",
             f"Range/ATR={range_atr:.2f} dentro de {ORB_MIN_RANGE_ATR}-{ORB_MAX_RANGE_ATR}",
-            "Backtest walk-forward positivo em 2023, 2024 e validação 2025",
+            "Walk-forward positivo em treino 2023-2024 e validação 2025",
         ],
         "entry": round_price(entry, symbol, ref_close),
         "entry_zone": {"low": round_price(zone_low, symbol, ref_close), "high": round_price(zone_high, symbol, ref_close)},
@@ -1390,9 +1531,9 @@ def generate_gold_orb_v10(symbol: str, timeframe: str, candles: List[Candle], pa
         "rr_estimate": rr,
         "confidence": confidence,
         "quality": quality,
-        "buy_score": 10,
-        "sell_score": 0,
-        "score_diff": 10,
+        "buy_score": buy_score,
+        "sell_score": sell_score,
+        "score_diff": abs(buy_score - sell_score),
         "score_threshold": 10,
         "candles_count": len(candles),
         "filters": {
@@ -1402,14 +1543,487 @@ def generate_gold_orb_v10(symbol: str, timeframe: str, candles: List[Candle], pa
             "one_trade_per_day": ORB_ONE_TRADE_PER_DAY,
             "range_atr_ok": True,
             "range_pct_ok": True,
+            "trend_filter_ok": True,
+            "news_ok": True,
         },
         "metrics": metrics,
         "risk": risk,
         "management": {
-            "order": "Coloque como ordem pendente BUY STOP. Nao entrar a mercado se ainda nao rompeu a entrada.",
+            "order": f"Coloque como ordem pendente {order_type}. Nao entrar a mercado se ainda nao rompeu a entrada.",
             "expire": f"Cancelar se nao ativar em {ORB_TRADE_WINDOW_MINUTES} minutos apos o fim da OR.",
-            "breakeven": "Opcional: mover SL para entrada apos +1R.",
-            "do_not_chase": "Se o preco romper sem pegar a ordem ou abrir com gap, nao perseguir.",
+            "breakeven": "Opcional: mover SL para entrada apos +1R, mas o backtest validado usa alvo fixo.",
+            "do_not_chase": "Se romper sem pegar a ordem ou abrir com gap, nao perseguir.",
+        },
+    }
+    signal["signal_id"] = make_signal_id(signal)
+    return signal
+
+
+
+# =========================
+# Portfolio ORB Multi v12.1
+# Combina: XAUUSD Gold v10.3 + NAS100 v11 + GER40/DAX v12
+# Cada ativo tem seu próprio motor, horário, custo, risco e filtro.
+# =========================
+
+def _pf_bool_env(name: str, default: bool) -> bool:
+    return os.getenv(name, str(default).lower()).lower() in {"1", "true", "yes", "sim"}
+
+PORTFOLIO_PROFILES = [
+    {
+        "key": "XAUUSD",
+        "aliases": {"XAUUSD", "GOLD"},
+        "name": "Gold ORB v10.3 Pepperstone Quality",
+        "timeframe_minutes": int(os.getenv("XAU_TIMEFRAME_MINUTES", "5")),
+        "use_local_timezone": False,
+        "session_timezone": "UTC",
+        "start_minute": int(os.getenv("XAU_ORB_START_MINUTE_UTC", "810")),
+        "range_minutes": int(os.getenv("XAU_ORB_RANGE_MINUTES", "15")),
+        "trade_window_minutes": int(os.getenv("XAU_ORB_TRADE_WINDOW_MINUTES", "120")),
+        "direction": os.getenv("XAU_ORB_DIRECTION", "AUTO_TREND").upper(),
+        "entry_engine": os.getenv("XAU_ORB_ENTRY_ENGINE", "stop").lower(),
+        "send_pending": _pf_bool_env("XAU_SEND_PENDING", True),
+        "buffer_mult": float(os.getenv("XAU_ORB_BUFFER_MULT", "0.05")),
+        "stop_mult": float(os.getenv("XAU_ORB_STOP_RANGE_MULT", "0.75")),
+        "take_r": float(os.getenv("XAU_ORB_TAKE_R", "1.5")),
+        "min_range_atr": float(os.getenv("XAU_ORB_MIN_RANGE_ATR", "0.35")),
+        "max_range_atr": float(os.getenv("XAU_ORB_MAX_RANGE_ATR", "3.5")),
+        "max_range_pct": float(os.getenv("XAU_ORB_MAX_RANGE_PCT", "0.025")),
+        "min_stop_points": float(os.getenv("XAU_ORB_MIN_STOP_POINTS", "1.2")),
+        "max_stop_points": float(os.getenv("XAU_ORB_MAX_STOP_POINTS", "10.0")),
+        "round_turn_cost_points": float(os.getenv("XAU_ROUND_TURN_COST_POINTS", "0.50")),
+        "trend_filter": os.getenv("XAU_ORB_TREND_FILTER", "with").lower(),
+        "ema_fast": int(os.getenv("XAU_ORB_EMA_FAST", "50")),
+        "ema_slow": int(os.getenv("XAU_ORB_EMA_SLOW", "200")),
+        "vwap_period": int(os.getenv("XAU_ORB_VWAP_PERIOD", "40")),
+        "reject_neutral_trend": _pf_bool_env("XAU_REJECT_NEUTRAL_TREND", True),
+        "momentum_filter_enabled": _pf_bool_env("XAU_MOMENTUM_FILTER_ENABLED", False),
+        "pos_buy_min": float(os.getenv("XAU_ORB_POS_BUY_MIN", "0.60")),
+        "pos_sell_max": float(os.getenv("XAU_ORB_POS_SELL_MAX", "0.40")),
+        "blocked_weekdays": {int(x) for x in os.getenv("XAU_BLOCKED_WEEKDAYS", "2").split(",") if x.strip().isdigit()},
+        "max_spread_points": float(os.getenv("XAU_MAX_REAL_SPREAD_POINTS", "0.50")),
+        "risk_pct": float(os.getenv("XAU_RISK_PER_TRADE_PCT", "3.0")),
+        "max_bars_in_signal": int(os.getenv("XAU_MAX_BARS_IN_SIGNAL", "48")),
+        "pip_value_per_lot_usd": float(os.getenv("XAU_PIP_VALUE_PER_LOT_USD", "10")),
+        "one_trade_per_day": True,
+    },
+    {
+        "key": "NAS100",
+        "aliases": {"USATECH", "NAS100", "US100", "USTEC", "NASDQ100"},
+        "name": "NAS100 NY Tech Breakout v11",
+        "timeframe_minutes": int(os.getenv("NAS_TIMEFRAME_MINUTES", "5")),
+        "use_local_timezone": False,
+        "session_timezone": "UTC",
+        "start_minute": int(os.getenv("NAS_ORB_START_MINUTE_UTC", "870")),
+        "range_minutes": int(os.getenv("NAS_ORB_RANGE_MINUTES", "45")),
+        "trade_window_minutes": int(os.getenv("NAS_ORB_TRADE_WINDOW_MINUTES", "120")),
+        "direction": os.getenv("NAS_ORB_DIRECTION", "BUY_STOP").upper(),
+        "entry_engine": os.getenv("NAS_ORB_ENTRY_ENGINE", "stop").lower(),
+        "send_pending": _pf_bool_env("NAS_SEND_PENDING", True),
+        "buffer_mult": float(os.getenv("NAS_ORB_BUFFER_MULT", "0.0")),
+        "stop_mult": float(os.getenv("NAS_ORB_STOP_RANGE_MULT", "1.25")),
+        "take_r": float(os.getenv("NAS_ORB_TAKE_R", "2.0")),
+        "min_range_atr": float(os.getenv("NAS_ORB_MIN_RANGE_ATR", "0.35")),
+        "max_range_atr": float(os.getenv("NAS_ORB_MAX_RANGE_ATR", "3.5")),
+        "max_range_pct": float(os.getenv("NAS_ORB_MAX_RANGE_PCT", "0.025")),
+        "min_stop_points": float(os.getenv("NAS_ORB_MIN_STOP_POINTS", "15.0")),
+        "max_stop_points": float(os.getenv("NAS_ORB_MAX_STOP_POINTS", "180.0")),
+        "round_turn_cost_points": float(os.getenv("NAS_ROUND_TURN_COST_POINTS", "2.0")),
+        "trend_filter": os.getenv("NAS_ORB_TREND_FILTER", "with").lower(),
+        "ema_fast": int(os.getenv("NAS_ORB_EMA_FAST", "50")),
+        "ema_slow": int(os.getenv("NAS_ORB_EMA_SLOW", "200")),
+        "vwap_period": int(os.getenv("NAS_ORB_VWAP_PERIOD", "40")),
+        "reject_neutral_trend": _pf_bool_env("NAS_REJECT_NEUTRAL_TREND", True),
+        "momentum_filter_enabled": _pf_bool_env("NAS_MOMENTUM_FILTER_ENABLED", False),
+        "pos_buy_min": float(os.getenv("NAS_ORB_POS_BUY_MIN", "0.60")),
+        "pos_sell_max": float(os.getenv("NAS_ORB_POS_SELL_MAX", "0.40")),
+        "blocked_weekdays": {int(x) for x in os.getenv("NAS_BLOCKED_WEEKDAYS", "").split(",") if x.strip().isdigit()},
+        "max_spread_points": float(os.getenv("NAS_MAX_REAL_SPREAD_POINTS", "2.5")),
+        "risk_pct": float(os.getenv("NAS_RISK_PER_TRADE_PCT", "2.0")),
+        "max_bars_in_signal": int(os.getenv("NAS_MAX_BARS_IN_SIGNAL", "48")),
+        "pip_value_per_lot_usd": float(os.getenv("NAS_PIP_VALUE_PER_LOT_USD", "1")),
+        "one_trade_per_day": True,
+    },
+    {
+        "key": "GER40",
+        "aliases": {"GER40", "DAX", "DE40", "GERMANY40", "DEUIDXEUR"},
+        "name": "GER40 DAX Cash Open Breakout v12",
+        "timeframe_minutes": int(os.getenv("GER_TIMEFRAME_MINUTES", "5")),
+        "use_local_timezone": True,
+        "session_timezone": os.getenv("GER_ORB_SESSION_TIMEZONE", "Europe/Berlin"),
+        "start_minute": int(os.getenv("GER_ORB_START_MINUTE_LOCAL", "540")),
+        "range_minutes": int(os.getenv("GER_ORB_RANGE_MINUTES", "30")),
+        "trade_window_minutes": int(os.getenv("GER_ORB_TRADE_WINDOW_MINUTES", "120")),
+        "direction": os.getenv("GER_ORB_DIRECTION", "AUTO").upper(),
+        "entry_engine": os.getenv("GER_ORB_ENTRY_ENGINE", "close_break").lower(),
+        "send_pending": _pf_bool_env("GER_SEND_PENDING", False),
+        "buffer_mult": float(os.getenv("GER_ORB_BUFFER_MULT", "0.10")),
+        "stop_mult": float(os.getenv("GER_ORB_STOP_RANGE_MULT", "0.90")),
+        "take_r": float(os.getenv("GER_ORB_TAKE_R", "2.5")),
+        "min_range_atr": float(os.getenv("GER_ORB_MIN_RANGE_ATR", "0.25")),
+        "max_range_atr": float(os.getenv("GER_ORB_MAX_RANGE_ATR", "4.0")),
+        "max_range_pct": float(os.getenv("GER_ORB_MAX_RANGE_PCT", "0.025")),
+        "min_stop_points": float(os.getenv("GER_ORB_MIN_STOP_POINTS", "8.0")),
+        "max_stop_points": float(os.getenv("GER_ORB_MAX_STOP_POINTS", "120.0")),
+        "round_turn_cost_points": float(os.getenv("GER_ROUND_TURN_COST_POINTS", "1.5")),
+        "trend_filter": os.getenv("GER_ORB_TREND_FILTER", "with").lower(),
+        "ema_fast": int(os.getenv("GER_ORB_EMA_FAST", "50")),
+        "ema_slow": int(os.getenv("GER_ORB_EMA_SLOW", "200")),
+        "vwap_period": int(os.getenv("GER_ORB_VWAP_PERIOD", "40")),
+        "reject_neutral_trend": _pf_bool_env("GER_REJECT_NEUTRAL_TREND", True),
+        "momentum_filter_enabled": _pf_bool_env("GER_MOMENTUM_FILTER_ENABLED", True),
+        "pos_buy_min": float(os.getenv("GER_ORB_POS_BUY_MIN", "0.60")),
+        "pos_sell_max": float(os.getenv("GER_ORB_POS_SELL_MAX", "0.40")),
+        "blocked_weekdays": {int(x) for x in os.getenv("GER_BLOCKED_WEEKDAYS", "0,4").split(",") if x.strip().isdigit()},
+        "max_spread_points": float(os.getenv("GER_MAX_REAL_SPREAD_POINTS", "2.0")),
+        "risk_pct": float(os.getenv("GER_RISK_PER_TRADE_PCT", "3.0")),
+        "max_bars_in_signal": int(os.getenv("GER_MAX_BARS_IN_SIGNAL", "24")),
+        "pip_value_per_lot_usd": float(os.getenv("GER_PIP_VALUE_PER_LOT_USD", "1")),
+        "one_trade_per_day": True,
+    },
+]
+
+ALL_PORTFOLIO_ALIASES = sorted({alias for p in PORTFOLIO_PROFILES for alias in p["aliases"]})
+
+
+def _profile_for_symbol(symbol: str) -> Optional[dict]:
+    s = norm_symbol(symbol)
+    for profile in PORTFOLIO_PROFILES:
+        if s in profile["aliases"]:
+            return profile
+    return None
+
+
+def _profile_tz(profile: dict) -> ZoneInfo:
+    try:
+        return ZoneInfo(profile.get("session_timezone") or "UTC")
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def _profile_minute(dt: datetime, profile: dict) -> int:
+    zdt = dt.astimezone(_profile_tz(profile)) if profile.get("use_local_timezone") else dt.astimezone(timezone.utc)
+    return zdt.hour * 60 + zdt.minute
+
+
+def _profile_market_date(dt: datetime, profile: dict) -> str:
+    zdt = dt.astimezone(_profile_tz(profile)) if profile.get("use_local_timezone") else dt.astimezone(timezone.utc)
+    return zdt.date().isoformat()
+
+
+def _profile_weekday(dt: datetime, profile: dict) -> int:
+    zdt = dt.astimezone(_profile_tz(profile)) if profile.get("use_local_timezone") else dt.astimezone(timezone.utc)
+    return zdt.weekday()
+
+
+def _today_has_profile_signal(symbol: str, dt_utc: datetime, profile: dict) -> bool:
+    if not profile.get("one_trade_per_day", True):
+        return False
+    target_date = _profile_market_date(dt_utc, profile)
+    state = load_state()
+    candidates: list[dict] = []
+    candidates.extend(state.get("_signal_history", []))
+    candidates.extend(state.get("_closed_signals", []))
+    for bucket in state.get("_open_signals", {}).values():
+        if isinstance(bucket, list):
+            candidates.extend(bucket)
+    for item in candidates[-1200:]:
+        if norm_symbol(item.get("symbol", "")) != symbol:
+            continue
+        if profile.get("key") not in str(item.get("strategy_profile", item.get("strategy", ""))).upper() and "ORB" not in str(item.get("strategy", "")).upper():
+            continue
+        ts = item.get("timestamp_utc") or item.get("activated_timestamp_utc")
+        if not ts:
+            sig = item.get("signal") if isinstance(item.get("signal"), dict) else {}
+            ts = sig.get("timestamp_utc") if sig else None
+        if not ts:
+            continue
+        try:
+            d = _profile_market_date(datetime.fromisoformat(str(ts).replace("Z", "+00:00")), profile)
+            if d == target_date:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _risk_block_profile(entry: float, sl: float, tp: float, symbol: str, profile: dict) -> dict:
+    pip = pip_size(symbol, entry)
+    risk_pips = abs(entry - sl) / pip
+    reward_pips = abs(tp - entry) / pip
+    risk_pct = float(profile.get("risk_pct", RISK_PER_TRADE_PCT))
+    pip_value = float(profile.get("pip_value_per_lot_usd", PIP_VALUE_PER_LOT_USD))
+    risk_amount = ACCOUNT_BALANCE * (risk_pct / 100.0)
+    raw_lot = risk_amount / max(0.000001, risk_pips * pip_value)
+    stepped = math.floor(raw_lot / LOT_STEP) * LOT_STEP if LOT_STEP > 0 else raw_lot
+    lot = min(MAX_LOT, max(MIN_LOT, stepped)) if risk_pips > 0 else 0
+    return {
+        "account_balance": round(ACCOUNT_BALANCE, 2),
+        "risk_pct": risk_pct,
+        "risk_amount": round(risk_amount, 2),
+        "risk_pips": round(risk_pips, 1),
+        "reward_pips": round(reward_pips, 1),
+        "estimated_lot": round(lot, 2),
+        "pip_value_per_lot_usd": pip_value,
+        "note": "Lote estimado por perfil. Confirme contrato/pip value da corretora antes de operar real.",
+    }
+
+
+def generate_portfolio_orb(symbol: str, timeframe: str, candles: List[Candle], payload_flags: Optional[dict] = None) -> dict:
+    symbol = norm_symbol(symbol)
+    timeframe = str(timeframe or "5").upper()
+    profile = _profile_for_symbol(symbol)
+    if not candles:
+        return build_hold(symbol, timeframe, None, "Aguardando candles", 0)
+    last = candles[-1]
+    last_dt = parse_timestamp(last.time).astimezone(timezone.utc)
+
+    if profile is None:
+        return build_hold(symbol, timeframe, last, f"Portfolio ORB bloqueado: ativo {symbol} não está nos perfis {ALL_PORTFOLIO_ALIASES}", len(candles))
+
+    profile_name = profile["name"]
+    tf_min = int(profile["timeframe_minutes"])
+    if timeframe_to_minutes(timeframe) != tf_min:
+        return build_hold(symbol, timeframe, last, f"{profile_name} requer gráfico M{tf_min}; recebido {timeframe}", len(candles))
+
+    if BLOCK_WEEKEND and _profile_weekday(last_dt, profile) >= 5:
+        return build_hold(symbol, timeframe, last, f"{profile_name} bloqueado no fim de semana", len(candles))
+    if _profile_weekday(last_dt, profile) in profile.get("blocked_weekdays", set()):
+        return build_hold(symbol, timeframe, last, f"{profile_name} bloqueado: weekday {_profile_weekday(last_dt, profile)} fora do filtro validado", len(candles))
+
+    blackout, blackout_reason = in_news_blackout(last_dt)
+    high_impact_flag = bool(payload_flags and (payload_flags.get("news") or str(payload_flags.get("impact", "")).upper() in {"HIGH", "RED", "ALTO"}))
+    if blackout:
+        return build_hold(symbol, timeframe, last, f"{profile_name} bloqueado por notícia: {blackout_reason}", len(candles))
+    if BLOCK_HIGH_IMPACT_FLAG and high_impact_flag:
+        return build_hold(symbol, timeframe, last, f"{profile_name} bloqueado: payload marcou notícia de alto impacto", len(candles))
+
+    if ORB_SPREAD_GUARD_ENABLED and last.bid is not None and last.ask is not None:
+        real_spread_points = max(0.0, safe_float(last.ask) - safe_float(last.bid))
+        if real_spread_points > float(profile["max_spread_points"]):
+            return build_hold(symbol, timeframe, last, f"{profile_name} bloqueado: spread real {real_spread_points:.2f} > limite {float(profile['max_spread_points']):.2f}", len(candles))
+
+    # Portfolio guard: limita risco simultâneo total sem impedir que os robôs sejam enviados no mesmo serviço.
+    state = load_state()
+    current_total_open_count = total_open_signals_count(state)
+    current_market_open_count = len(market_open_signals(state, symbol, timeframe))
+    if current_market_open_count >= MAX_OPEN_SIGNALS_PER_MARKET:
+        return build_hold(symbol, timeframe, last, f"{profile_name}: já existe sinal aberto para este ativo", len(candles))
+    if current_total_open_count >= MAX_TOTAL_OPEN_SIGNALS:
+        return build_hold(symbol, timeframe, last, f"{profile_name}: limite global de sinais abertos atingido ({MAX_TOTAL_OPEN_SIGNALS})", len(candles))
+
+    if _today_has_profile_signal(symbol, last_dt, profile):
+        return build_hold(symbol, timeframe, last, f"{profile_name}: já existe trade/setup deste ativo hoje", len(candles))
+
+    parsed_all: list[tuple[datetime, Candle]] = []
+    parsed_day: list[tuple[datetime, Candle]] = []
+    for c in candles:
+        dt = parse_timestamp(c.time).astimezone(timezone.utc)
+        parsed_all.append((dt, c))
+        if _profile_market_date(dt, profile) == _profile_market_date(last_dt, profile):
+            parsed_day.append((dt, c))
+    parsed_all.sort(key=lambda x: x[0])
+    parsed_day.sort(key=lambda x: x[0])
+    if len(parsed_day) < max(20, ATR_PERIOD + 5):
+        return build_hold(symbol, timeframe, last, f"{profile_name} aguardando histórico intraday {len(parsed_day)}/{max(20, ATR_PERIOD + 5)}", len(candles))
+
+    range_start = int(profile["start_minute"])
+    range_end = range_start + int(profile["range_minutes"])
+    trade_end = range_end + int(profile["trade_window_minutes"])
+    current_min = _profile_minute(last_dt, profile)
+    range_items = [(dt, c) for dt, c in parsed_day if range_start <= _profile_minute(dt, profile) < range_end]
+    if len(range_items) < max(2, int(profile["range_minutes"]) // tf_min):
+        return build_hold(symbol, timeframe, last, f"{profile_name} aguardando fechamento da faixa de abertura", len(candles))
+    if current_min < range_end:
+        return build_hold(symbol, timeframe, last, f"{profile_name} faixa de abertura ainda em formação", len(candles))
+    if current_min >= trade_end:
+        return build_hold(symbol, timeframe, last, f"{profile_name} janela operacional encerrada", len(candles))
+
+    all_items_day = [(dt, c) for dt, c in parsed_day if _profile_minute(dt, profile) <= current_min]
+    highs_day = [safe_float(c.high) for _, c in all_items_day]
+    lows_day = [safe_float(c.low) for _, c in all_items_day]
+    closes_day = [safe_float(c.close) for _, c in all_items_day]
+    atr_series = atr_values(highs_day, lows_day, closes_day, ATR_PERIOD)
+    range_end_dt = range_items[-1][0]
+    day_dts = [dt for dt, _ in all_items_day]
+    end_idx = max(0, day_dts.index(range_end_dt)) if range_end_dt in day_dts else len(day_dts) - 1
+    atr_val = float(atr_series[end_idx] or 0.0)
+    if atr_val <= 0:
+        return build_hold(symbol, timeframe, last, f"{profile_name} aguardando ATR válido", len(candles))
+
+    range_high = max(safe_float(c.high) for _, c in range_items)
+    range_low = min(safe_float(c.low) for _, c in range_items)
+    range_width = max(0.0, range_high - range_low)
+    ref_close = safe_float(range_items[-1][1].close, safe_float(last.close))
+    last_close = safe_float(last.close, ref_close)
+    if range_width <= 0 or ref_close <= 0:
+        return build_hold(symbol, timeframe, last, f"{profile_name} faixa inválida", len(candles))
+
+    range_atr = range_width / atr_val
+    range_pct = range_width / ref_close
+    metrics = {
+        "profile": profile["key"],
+        "profile_name": profile_name,
+        "orb_range_high": round_price(range_high, symbol, ref_close),
+        "orb_range_low": round_price(range_low, symbol, ref_close),
+        "orb_range_width": round_price(range_width, symbol, ref_close),
+        "orb_range_atr": round(range_atr, 3),
+        "orb_range_pct": round(range_pct * 100, 4),
+        "orb_start": f"{range_start // 60:02d}:{range_start % 60:02d}",
+        "orb_session_timezone": profile.get("session_timezone"),
+        "orb_range_minutes": profile.get("range_minutes"),
+        "orb_trade_window_minutes": profile.get("trade_window_minutes"),
+        "atr": round_price(atr_val, symbol, ref_close),
+        "strategy_mode": STRATEGY_MODE,
+    }
+    orb_position = (ref_close - range_low) / range_width if range_width > 0 else 0.5
+    metrics["orb_position"] = round(orb_position, 3)
+    metrics["entry_engine"] = profile["entry_engine"]
+
+    if not (float(profile["min_range_atr"]) <= range_atr <= float(profile["max_range_atr"])):
+        return build_hold(symbol, timeframe, last, f"{profile_name} bloqueou: range/ATR {range_atr:.2f} fora do filtro", len(candles), metrics)
+    if range_pct > float(profile["max_range_pct"]):
+        return build_hold(symbol, timeframe, last, f"{profile_name} bloqueou: range_pct {range_pct:.4%} alto demais", len(candles), metrics)
+
+    history_items = [(dt, c) for dt, c in parsed_all if dt <= range_end_dt]
+    hist_highs = [safe_float(c.high) for _, c in history_items]
+    hist_lows = [safe_float(c.low) for _, c in history_items]
+    hist_closes = [safe_float(c.close) for _, c in history_items]
+    hist_volumes = [max(0.0, safe_float(c.volume, 0.0)) for _, c in history_items]
+    ema_fast_series = ema_values(hist_closes, int(profile["ema_fast"]))
+    ema_slow_series = ema_values(hist_closes, int(profile["ema_slow"]))
+    vwap_series = rolling_vwap(hist_highs, hist_lows, hist_closes, hist_volumes, int(profile["vwap_period"]))
+    ema_fast = float(ema_fast_series[-1] or ref_close)
+    ema_slow = float(ema_slow_series[-1] or ref_close)
+    vwap = float(vwap_series[-1] or ref_close)
+    trend_up = ref_close > ema_fast > ema_slow and ref_close > vwap
+    trend_down = ref_close < ema_fast < ema_slow and ref_close < vwap
+    metrics.update({
+        "ema_fast": round_price(ema_fast, symbol, ref_close),
+        "ema_slow": round_price(ema_slow, symbol, ref_close),
+        "vwap": round_price(vwap, symbol, ref_close),
+        "trend_up": trend_up,
+        "trend_down": trend_down,
+        "risk_pct_profile": profile.get("risk_pct"),
+    })
+
+    requested = str(profile["direction"]).upper()
+    if requested in {"AUTO", "AUTO_TREND"}:
+        if trend_up:
+            desired_action = "BUY"
+        elif trend_down:
+            desired_action = "SELL"
+        elif profile.get("reject_neutral_trend", True):
+            return build_hold(symbol, timeframe, last, f"{profile_name} bloqueou: tendência neutra no filtro EMA/VWAP", len(candles), metrics)
+        else:
+            desired_action = "BUY"
+    elif "SELL" in requested:
+        desired_action = "SELL"
+    else:
+        desired_action = "BUY"
+
+    if profile.get("trend_filter") == "with":
+        if desired_action == "BUY" and not trend_up:
+            return build_hold(symbol, timeframe, last, f"{profile_name} bloqueou BUY: tendência EMA/VWAP não está compradora", len(candles), metrics)
+        if desired_action == "SELL" and not trend_down:
+            return build_hold(symbol, timeframe, last, f"{profile_name} bloqueou SELL: tendência EMA/VWAP não está vendedora", len(candles), metrics)
+
+    if profile.get("momentum_filter_enabled", False):
+        if desired_action == "BUY" and orb_position < float(profile["pos_buy_min"]):
+            return build_hold(symbol, timeframe, last, f"{profile_name} bloqueou BUY: posição ORB {orb_position:.2f} < {float(profile['pos_buy_min']):.2f}", len(candles), metrics)
+        if desired_action == "SELL" and orb_position > float(profile["pos_sell_max"]):
+            return build_hold(symbol, timeframe, last, f"{profile_name} bloqueou SELL: posição ORB {orb_position:.2f} > {float(profile['pos_sell_max']):.2f}", len(candles), metrics)
+
+    buffer_points = range_width * float(profile["buffer_mult"])
+    stop_distance = min(max(range_width * float(profile["stop_mult"]), float(profile["min_stop_points"]), float(profile["round_turn_cost_points"]) * 2.5), float(profile["max_stop_points"]))
+    buy_trigger = range_high + buffer_points + float(profile["round_turn_cost_points"]) / 2.0
+    sell_trigger = range_low - buffer_points - float(profile["round_turn_cost_points"]) / 2.0
+    entry_engine = profile["entry_engine"]
+
+    if entry_engine == "close_break":
+        if desired_action == "BUY" and last_close < buy_trigger:
+            return build_hold(symbol, timeframe, last, f"{profile_name} aguardando fechamento acima de {buy_trigger:.2f}", len(candles), metrics)
+        if desired_action == "SELL" and last_close > sell_trigger:
+            return build_hold(symbol, timeframe, last, f"{profile_name} aguardando fechamento abaixo de {sell_trigger:.2f}", len(candles), metrics)
+
+    if desired_action == "BUY":
+        action = "BUY"
+        order_type = "BUY" if entry_engine == "close_break" else "BUY_STOP"
+        entry = last_close if entry_engine == "close_break" else buy_trigger
+        sl = entry - stop_distance
+        tp = entry + stop_distance * float(profile["take_r"])
+        zone_low, zone_high = entry, entry + buffer_points
+        buy_score, sell_score = 12, 2
+        direction_msg = f"{order_type} acima da ORB"
+    else:
+        action = "SELL"
+        order_type = "SELL" if entry_engine == "close_break" else "SELL_STOP"
+        entry = last_close if entry_engine == "close_break" else sell_trigger
+        sl = entry + stop_distance
+        tp = entry - stop_distance * float(profile["take_r"])
+        zone_low, zone_high = entry - buffer_points, entry
+        buy_score, sell_score = 2, 12
+        direction_msg = f"{order_type} abaixo da ORB"
+
+    risk = _risk_block_profile(entry, sl, tp, symbol, profile)
+    rr = round(risk["reward_pips"] / risk["risk_pips"], 2) if risk.get("risk_pips") else float(profile["take_r"])
+    order_status = "ACTIVE" if entry_engine == "close_break" else ("PENDING" if profile.get("send_pending", True) else "ACTIVE")
+    confidence = 80 if profile["key"] in {"XAUUSD", "GER40"} else 74
+    quality = "Validada" if profile["key"] != "NAS100" else "Diversificação validada"
+
+    signal = {
+        **timestamp_fields(last.time),
+        "strategy": profile_name,
+        "strategy_profile": profile["key"],
+        "version": APP_VERSION,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "action": action,
+        "order_type": order_type,
+        "order_status": order_status,
+        "pending_expire_bars": int(profile.get("trade_window_minutes", 120)) // max(1, tf_min),
+        "max_bars_in_signal": int(profile.get("max_bars_in_signal", MAX_BARS_IN_SIGNAL)),
+        "reason": f"{profile_name}: {order_type} seguindo estratégia validada",
+        "reasons": [
+            f"Perfil: {profile['key']} | {profile_name}",
+            f"ORB high={round_price(range_high, symbol, ref_close)} low={round_price(range_low, symbol, ref_close)}",
+            f"Entrada {direction_msg}",
+            f"SL = {float(profile['stop_mult']):.2f}x range | TP = {float(profile['take_r']):.2f}R",
+            f"Filtro tendência: EMA{profile['ema_fast']}={round_price(ema_fast, symbol, ref_close)} EMA{profile['ema_slow']}={round_price(ema_slow, symbol, ref_close)} VWAP{profile['vwap_period']}={round_price(vwap, symbol, ref_close)}",
+            f"Range/ATR={range_atr:.2f} dentro de {profile['min_range_atr']}-{profile['max_range_atr']}",
+            "Parâmetros vêm dos backtests validados de 2023-2025.",
+        ],
+        "entry": round_price(entry, symbol, ref_close),
+        "entry_zone": {"low": round_price(zone_low, symbol, ref_close), "high": round_price(zone_high, symbol, ref_close)},
+        "stop_loss": round_price(sl, symbol, ref_close),
+        "take_profit": round_price(tp, symbol, ref_close),
+        "rr_estimate": rr,
+        "confidence": confidence,
+        "quality": quality,
+        "buy_score": buy_score,
+        "sell_score": sell_score,
+        "score_diff": abs(buy_score - sell_score),
+        "score_threshold": 10,
+        "candles_count": len(candles),
+        "filters": {
+            "symbol_ok": True,
+            "timeframe_ok": True,
+            "orb_window_ok": True,
+            "one_trade_per_day": profile.get("one_trade_per_day", True),
+            "range_atr_ok": True,
+            "range_pct_ok": True,
+            "trend_filter_ok": True,
+            "news_ok": True,
+            "portfolio_open_total": current_total_open_count,
+            "portfolio_max_total": MAX_TOTAL_OPEN_SIGNALS,
+        },
+        "metrics": metrics,
+        "risk": risk,
+        "management": {
+            "order": f"Use {order_type}. Se for STOP, não entrar a mercado se ainda não rompeu a entrada.",
+            "expire": f"Cancelar se não ativar/andar em até {profile['trade_window_minutes']} minutos após o fim da OR.",
+            "breakeven": "Opcional em demo; o backtest validado usa o gerenciamento fixo do perfil.",
+            "do_not_chase": "Se romper sem pegar a ordem ou abrir com gap, não perseguir.",
         },
     }
     signal["signal_id"] = make_signal_id(signal)
@@ -1421,7 +2035,10 @@ def generate_signal(symbol: str, timeframe: str, candles: List[Candle], payload_
     if not candles:
         return build_hold(symbol, timeframe, None, "Aguardando candles", 0)
 
-    if STRATEGY_MODE == "GOLD_ORB_V10":
+    if STRATEGY_MODE.startswith("PORTFOLIO_ORB"):
+        return generate_portfolio_orb(symbol, timeframe, candles, payload_flags=payload_flags)
+
+    if STRATEGY_MODE.startswith("GOLD_ORB"):
         return generate_gold_orb_v10(symbol, timeframe, candles, payload_flags=payload_flags)
 
     last = candles[-1]
@@ -1881,12 +2498,12 @@ def format_signal(signal: dict) -> str:
     reasons = signal.get("reasons", []) or [signal.get("reason", "-")]
     reasons_text = "\n".join(f"• {esc(str(x))}" for x in reasons[:7])
     direction = "COMPRA" if action == "BUY" else "VENDA" if action == "SELL" else "AGUARDAR"
-    if str(signal.get("strategy_mode", "")).upper() == "GOLD_ORB_V10":
+    if str(signal.get("strategy_mode", "")).upper().startswith("GOLD_ORB"):
         order = signal.get("order_type", "-")
         status = signal.get("order_status", "-")
         management = signal.get("management", {}) or {}
         return "\n".join([
-            f"🥇 <b>GOLD ORB v10 — {esc(str(order))}</b> | <b>{esc(signal.get('symbol','-'))}</b> {esc(signal.get('timeframe','-'))}",
+            f"🥇 <b>GOLD GER40 DAX ORB v12 — {esc(str(order))}</b> | <b>{esc(signal.get('symbol','-'))}</b> {esc(signal.get('timeframe','-'))}",
             f"Status: <b>{esc(str(status))}</b> | Qualidade: <b>{esc(signal.get('quality','-'))}</b> | Confiança: <b>{signal.get('confidence',0)}%</b>",
             f"ID: <code>{esc(signal.get('signal_id', '-'))}</code>",
             "━━━━━━━━━━━━━━━━━━━━",
@@ -2187,7 +2804,7 @@ def _backtest_dashboard_summary() -> dict:
 def _orb_live_context(state: dict, symbol: str = "XAUUSD", timeframe: str = "M5") -> dict:
     snapshot = _last_candle_snapshot(state, symbol, timeframe)
     open_signals = _flatten_open_signals_from_state(state)
-    orb_open = [x for x in open_signals if str(x.get("strategy_mode", "")).upper() == "GOLD_ORB_V10"]
+    orb_open = [x for x in open_signals if str(x.get("strategy_mode", "")).upper().startswith("GOLD_ORB")]
     if orb_open:
         sig = orb_open[0]
         status = str(sig.get("order_status", "ACTIVE")).upper()
@@ -2206,8 +2823,8 @@ def _orb_live_context(state: dict, symbol: str = "XAUUSD", timeframe: str = "M5"
     except Exception:
         dt = datetime.now(timezone.utc)
     current_min = _utc_minute(dt)
-    range_start = ORB_START_MINUTE_UTC
-    range_end = ORB_START_MINUTE_UTC + ORB_RANGE_MINUTES
+    range_start = _orb_start_minute()
+    range_end = range_start + ORB_RANGE_MINUTES
     trade_end = range_end + ORB_TRADE_WINDOW_MINUTES
     phase = "WAITING_RANGE"
     label = "Aguardando início da faixa de abertura"
@@ -2227,9 +2844,9 @@ def _orb_live_context(state: dict, symbol: str = "XAUUSD", timeframe: str = "M5"
         parsed: list[tuple[datetime, dict]] = []
         for c in state.get(keys[0], []):
             cdt = parse_timestamp(c.get("time")).astimezone(timezone.utc)
-            if cdt.date() == dt.date():
+            if _orb_market_date(cdt) == _orb_market_date(dt):
                 parsed.append((cdt, c))
-        items = [(cdt, c) for cdt, c in parsed if range_start <= _utc_minute(cdt) < range_end]
+        items = [(cdt, c) for cdt, c in parsed if range_start <= _orb_minute(cdt) < range_end]
         if items:
             highs = [safe_float(c.get("high")) for _, c in items]
             lows = [safe_float(c.get("low")) for _, c in items]
@@ -2299,7 +2916,8 @@ def api_live(symbol: str = "XAUUSD", timeframe: str = "M5", candles: int = 160) 
             "orb_symbol_allowlist": ORB_SYMBOL_ALLOWLIST,
             "risk_per_trade_pct": RISK_PER_TRADE_PCT,
             "account_balance": ACCOUNT_BALANCE,
-            "orb_start_utc": f"{ORB_START_MINUTE_UTC // 60:02d}:{ORB_START_MINUTE_UTC % 60:02d}",
+            "orb_start_local": f"{range_start // 60:02d}:{range_start % 60:02d}",
+        "orb_session_timezone": ORB_SESSION_TIMEZONE,
             "orb_range_minutes": ORB_RANGE_MINUTES,
             "orb_trade_window_minutes": ORB_TRADE_WINDOW_MINUTES,
             "orb_direction": ORB_DIRECTION,
@@ -2356,7 +2974,7 @@ body:before{content:"";position:fixed;inset:0;background:linear-gradient(transpa
   </div>
 
   <div class="grid">
-    <section class="card span3"><div class="label">Preço XAUUSD</div><div id="price" class="big gold">--</div><div id="priceSub" class="sub">Aguardando webhook</div></section>
+    <section class="card span3"><div class="label">Preço ativo</div><div id="price" class="big gold">--</div><div id="priceSub" class="sub">Aguardando webhook</div></section>
     <section class="card span3"><div class="label">Fase do robô</div><div id="phase" class="phase">--</div><div id="phaseSub" class="sub">--</div></section>
     <section class="card span3"><div class="label">Performance ao vivo</div><div class="big"><span id="wins" class="green">0</span><span class="muted"> / </span><span id="losses" class="red">0</span></div><div class="sub">Win rate: <b id="wr">0%</b> • Abertos: <b id="openCount">0</b></div></section>
     <section class="card span3"><div class="label">Risco configurado</div><div class="big"><span id="riskPct">--</span>%</div><div class="sub">Banca: <span id="balance" class="mono">--</span> • Custo BT: <span id="cost" class="mono">--</span></div></section>
@@ -2419,7 +3037,7 @@ body:before{content:"";position:fixed;inset:0;background:linear-gradient(transpa
     <section class="card span6"><div class="label">Últimos resultados</div><div id="closedTable"></div></section>
     <section class="card span6"><div class="label">Atividade do bot em tempo real</div><div id="feed" class="feed"></div></section>
   </div>
-  <div class="footer">Dashboard v10.1 • Dados internos via /api/live • Gráfico TradingView apenas como referência visual.</div>
+  <div class="footer">Dashboard v10.2 • Dados internos via /api/live • Gráfico TradingView apenas como referência visual.</div>
 </div>
 <script src="https://s3.tradingview.com/tv.js"></script>
 <script>
